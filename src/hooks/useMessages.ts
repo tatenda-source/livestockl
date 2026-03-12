@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 
@@ -121,7 +121,9 @@ export function useMessages(conversationId: string | undefined) {
     },
   });
 
-  // Realtime subscription for new messages
+  // Realtime subscription for new messages (debounced)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   useEffect(() => {
     if (!conversationId || !isSupabaseConfigured) return;
 
@@ -131,13 +133,17 @@ export function useMessages(conversationId: string | undefined) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
         () => {
-          queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-          queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+            queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          }, 1000);
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
   }, [conversationId, queryClient]);

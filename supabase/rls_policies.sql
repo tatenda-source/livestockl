@@ -41,9 +41,9 @@ create policy "Sellers can update own listings"
     and seller_id IS NOT DISTINCT FROM (select seller_id from public.livestock_items where id = livestock_items.id)
   );
 
-create policy "Sellers can delete own listings"
+create policy "Sellers can delete own listings with no bids"
   on public.livestock_items for delete
-  using (auth.uid() = seller_id);
+  using (auth.uid() = seller_id and bid_count = 0 and status = 'active');
 
 -- BIDS
 create policy "Bids are viewable by everyone"
@@ -149,16 +149,25 @@ create policy "Users can insert messages in own conversations"
     )
   );
 
-create policy "Users can update messages"
+-- Sender can update own messages (e.g. edit content)
+create policy "Sender can update own messages"
+  on public.messages for update
+  using (auth.uid() = sender_id)
+  with check (auth.uid() = sender_id);
+
+-- Recipient can only mark messages as read
+create policy "Recipient can mark messages as read"
   on public.messages for update
   using (
-    exists (
+    auth.uid() != sender_id
+    and exists (
       select 1 from public.conversations c
       where c.id = conversation_id
       and (c.participant_1 = auth.uid() or c.participant_2 = auth.uid())
     )
-    and (
-      auth.uid() = sender_id
-      or (auth.uid() != sender_id and read = true)
-    )
+  )
+  with check (
+    -- Only the read column can change; content and sender_id must stay the same
+    content IS NOT DISTINCT FROM (select content from public.messages where id = messages.id)
+    and sender_id IS NOT DISTINCT FROM (select sender_id from public.messages where id = messages.id)
   );

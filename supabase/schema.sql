@@ -183,6 +183,11 @@ $$ language plpgsql security definer;
 create or replace function public.increment_view_count(p_item_id uuid)
 returns void as $$
 begin
+  -- Require authentication to prevent anonymous view count inflation
+  if auth.uid() is null then
+    return;
+  end if;
+
   update public.livestock_items
   set view_count = view_count + 1
   where id = p_item_id;
@@ -196,8 +201,8 @@ declare
   v_item record;
   v_winning_bid record;
 begin
-  -- Prevent concurrent execution
-  if not pg_try_advisory_lock(42) then
+  -- Prevent concurrent execution (xact lock auto-releases on transaction end, preventing leaks)
+  if not pg_try_advisory_xact_lock(42) then
     return;
   end if;
 
@@ -243,7 +248,7 @@ begin
     end if;
   end loop;
 
-  perform pg_advisory_unlock(42);
+  -- No explicit unlock needed: pg_try_advisory_xact_lock auto-releases on commit/rollback
 end;
 $$ language plpgsql security definer;
 
