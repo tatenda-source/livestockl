@@ -9,6 +9,7 @@ import { PostListing } from "./components/PostListing";
 import { MyListings } from "./components/MyListings";
 import { PaymentHistory } from "./components/PaymentHistory";
 import { Notifications } from "./components/Notifications";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 export const router = createBrowserRouter([
   {
@@ -17,12 +18,30 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: HomeFeed },
       { path: "item/:id", Component: ItemDetail },
-      { path: "checkout/:id", Component: CheckoutScreen },
-      { path: "payment-status/:ref", Component: PaymentStatus },
-      { path: "post", Component: PostListing },
-      { path: "my-listings", Component: MyListings },
-      { path: "payments", Component: PaymentHistory },
-      { path: "notifications", Component: Notifications },
+      {
+        path: "checkout/:id",
+        element: <ProtectedRoute><CheckoutScreen /></ProtectedRoute>,
+      },
+      {
+        path: "payment-status/:ref",
+        element: <ProtectedRoute><PaymentStatus /></ProtectedRoute>,
+      },
+      {
+        path: "post",
+        element: <ProtectedRoute><PostListing /></ProtectedRoute>,
+      },
+      {
+        path: "my-listings",
+        element: <ProtectedRoute><MyListings /></ProtectedRoute>,
+      },
+      {
+        path: "payments",
+        element: <ProtectedRoute><PaymentHistory /></ProtectedRoute>,
+      },
+      {
+        path: "notifications",
+        element: <ProtectedRoute><Notifications /></ProtectedRoute>,
+      },
     ],
   },
   {

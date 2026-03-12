@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -13,6 +13,50 @@ Deno.serve(async (req) => {
   try {
     const { reference, amount, method, phone } = await req.json();
 
+    // Input validation
+    if (!reference || typeof reference !== 'string') {
+      return new Response(
+        JSON.stringify({ error: "Invalid reference" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (!amount || typeof amount !== 'number' || amount <= 0) {
+      return new Response(
+        JSON.stringify({ error: "Invalid amount" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (!['EcoCash', 'OneMoney', 'Card'].includes(method)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid payment method" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if ((method === 'EcoCash' || method === 'OneMoney') && !phone) {
+      return new Response(
+        JSON.stringify({ error: "Phone number required for mobile payments" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify the payment record exists and amount matches
+    const verifyClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const { data: paymentRecord } = await verifyClient
+      .from("payments")
+      .select("amount, user_id")
+      .eq("reference", reference)
+      .single();
+
+    if (!paymentRecord || paymentRecord.amount !== amount) {
+      return new Response(
+        JSON.stringify({ error: "Payment record not found or amount mismatch" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const integrationId = Deno.env.get("PAYNOW_INTEGRATION_ID");
     const integrationKey = Deno.env.get("PAYNOW_INTEGRATION_KEY");
     const resultUrl = Deno.env.get("PAYNOW_RESULT_URL");
@@ -21,7 +65,7 @@ Deno.serve(async (req) => {
     if (!integrationId || !integrationKey) {
       return new Response(
         JSON.stringify({ error: "Paynow not configured", reference }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

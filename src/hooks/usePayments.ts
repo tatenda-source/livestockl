@@ -91,18 +91,24 @@ export function useInitiatePayment() {
       if (error) throw error;
 
       // Call Edge Function to initiate Paynow payment
-      try {
-        const { data: paynowResult } = await supabase.functions.invoke('initiate-payment', {
-          body: { reference, amount, method, phone },
-        });
+      const { data: paynowResult, error: fnError } = await supabase.functions.invoke('initiate-payment', {
+        body: { reference, amount, method, phone },
+      });
 
-        if (paynowResult?.redirectUrl && method === 'Card') {
-          window.location.href = paynowResult.redirectUrl;
-          return payment;
-        }
-      } catch {
-        // Edge function may not be deployed yet — payment record still created
-        console.warn('Paynow edge function not available — payment created locally');
+      if (fnError) {
+        // Clean up orphaned payment record
+        await supabase.from('payments').delete().eq('reference', reference);
+        throw new Error('Payment service unavailable. Please try again.');
+      }
+
+      if (paynowResult?.error) {
+        await supabase.from('payments').delete().eq('reference', reference);
+        throw new Error(paynowResult.error);
+      }
+
+      if (paynowResult?.redirectUrl && method === 'Card') {
+        window.location.href = paynowResult.redirectUrl;
+        return payment;
       }
 
       return payment;

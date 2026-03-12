@@ -1,11 +1,14 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { Home, Plus, List, Bell, CreditCard } from "lucide-react";
+import { Home, Plus, List, Bell, CreditCard, LogOut } from "lucide-react";
 import { useUnreadCount } from "../../hooks/useNotifications";
+import { useAuthStore } from "../../stores/authStore";
 
 export function Root() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: unreadCount } = useUnreadCount();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
@@ -15,13 +18,22 @@ export function Root() {
     { icon: CreditCard, label: 'Pay', path: '/payments' },
   ];
 
+  const handleNavClick = async (path: string) => {
+    navigate(path);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/auth');
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background max-w-[480px] mx-auto">
       <div className="flex-1 overflow-y-auto">
         <Outlet />
       </div>
 
-      <nav className="border-t bg-card shadow-lg">
+      <nav className="border-t bg-card shadow-lg" aria-label="Main navigation">
         <div className="flex items-center justify-around h-16">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -30,7 +42,9 @@ export function Root() {
             return (
               <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => handleNavClick(item.path)}
+                aria-label={item.label}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex flex-col items-center justify-center flex-1 h-full relative transition-colors ${
                   isActive ? 'text-primary' : 'text-muted-foreground'
                 }`}
@@ -50,6 +64,16 @@ export function Root() {
               </button>
             );
           })}
+          {user && (
+            <button
+              onClick={handleLogout}
+              aria-label="Log out"
+              className="flex flex-col items-center justify-center flex-1 h-full text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="text-xs mt-1">Exit</span>
+            </button>
+          )}
         </div>
       </nav>
     </div>

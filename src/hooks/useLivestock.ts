@@ -50,8 +50,8 @@ export function useLivestockItem(id: string | undefined) {
 
       if (error) throw error;
 
-      // Increment view count
-      supabase.from('livestock_items').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id!).then();
+      // Increment view count atomically
+      supabase.rpc('increment_view_count', { p_item_id: id! }).then();
 
       return data;
     },
@@ -155,6 +155,15 @@ export function useWonItems() {
 export function useUploadImage() {
   return useMutation({
     mutationFn: async ({ file, userId }: { file: File; userId: string }) => {
+      // Validate file type and size
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error('Only JPEG, PNG, WebP, and GIF images are allowed');
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('Image must be less than 5MB');
+      }
+
       const ext = file.name.split('.').pop();
       const path = `${userId}/${Date.now()}.${ext}`;
 

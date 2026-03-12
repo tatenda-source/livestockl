@@ -48,9 +48,11 @@ create policy "Authenticated users can create payments"
   on public.payments for insert
   with check (auth.uid() = user_id);
 
-create policy "Service role can update payments"
+-- Only payment owner can view status; service role bypasses RLS for webhook updates
+create policy "Users can update own payment status"
   on public.payments for update
-  using (true);
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- NOTIFICATIONS
 create policy "Users can view own notifications"
@@ -61,18 +63,19 @@ create policy "Users can update own notifications"
   on public.notifications for update
   using (auth.uid() = user_id);
 
-create policy "Service role can create notifications"
+-- Users can only create notifications for themselves; service role bypasses RLS for system notifications
+create policy "Users can create own notifications"
   on public.notifications for insert
-  with check (true);
+  with check (auth.uid() = user_id);
 
 -- STORAGE: livestock-images
 create policy "Anyone can view livestock images"
   on storage.objects for select
   using (bucket_id = 'livestock-images');
 
-create policy "Authenticated users can upload livestock images"
+create policy "Authenticated users can upload to own folder"
   on storage.objects for insert
-  with check (bucket_id = 'livestock-images' and auth.role() = 'authenticated');
+  with check (bucket_id = 'livestock-images' and auth.uid()::text = (storage.foldername(name))[1]);
 
 create policy "Users can delete own images"
   on storage.objects for delete

@@ -18,6 +18,7 @@ Deno.serve(async (req) => {
     const receivedHash = params.hash;
     const valuesToHash = Object.entries(params)
       .filter(([key]) => key.toLowerCase() !== "hash")
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([, value]) => value)
       .join("");
 
@@ -49,6 +50,17 @@ Deno.serve(async (req) => {
 
     // Update payment by reference
     const reference = params.reference;
+
+    // Idempotency: skip if payment already in terminal state
+    const { data: existingPayment } = await supabase
+      .from("payments")
+      .select("status")
+      .eq("reference", reference)
+      .single();
+
+    if (existingPayment?.status === "paid" || existingPayment?.status === "failed") {
+      return new Response("Already processed", { status: 200 });
+    }
     const { error } = await supabase
       .from("payments")
       .update({

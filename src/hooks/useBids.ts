@@ -61,32 +61,15 @@ export function usePlaceBid() {
         return { id: 'mock-bid-' + Date.now(), amount };
       }
 
-      // Insert bid
-      const { data: bid, error: bidError } = await supabase
-        .from('bids')
-        .insert({
-          livestock_id: livestockId,
-          user_id: user!.id,
-          amount,
-        })
-        .select()
-        .single();
+      // Use atomic database function for bid placement
+      const { data, error } = await supabase.rpc('place_bid', {
+        p_livestock_id: livestockId,
+        p_user_id: user!.id,
+        p_amount: amount,
+      });
 
-      if (bidError) throw bidError;
-
-      // Update livestock current_bid and bid_count
-      const { error: updateError } = await supabase
-        .from('livestock_items')
-        .update({
-          current_bid: amount,
-          bid_count: supabase.rpc ? undefined : 0, // handled by trigger ideally
-        })
-        .eq('id', livestockId)
-        .lt('current_bid', amount);
-
-      if (updateError) throw updateError;
-
-      return bid;
+      if (error) throw error;
+      return { id: data, amount };
     },
     onSuccess: (_, { livestockId }) => {
       queryClient.invalidateQueries({ queryKey: ['bids', livestockId] });
