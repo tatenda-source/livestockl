@@ -3,8 +3,9 @@ import { MessageCircle, Edit, Trash2, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { useMyListings, useWonItems } from "../../hooks/useLivestock";
+import { useMyListings, useWonItems, useDeleteListing } from "../../hooks/useLivestock";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export function MyListings() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export function MyListings() {
 
   const { data: sellingItems, isLoading: loadingSelling } = useMyListings();
   const { data: wonItems, isLoading: loadingWon } = useWonItems();
+  const deleteListing = useDeleteListing();
 
   const getImageUrl = (item: any) => item.imageUrl ?? item.image_urls?.[0] ?? '';
   const getCurrentBid = (item: any) => item.currentBid ?? item.current_bid ?? 0;
@@ -55,8 +57,24 @@ export function MyListings() {
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3">
-                  <Button variant="outline" size="sm" className="flex-1"><Edit className="w-4 h-4 mr-1" />Edit</Button>
-                  <Button variant="outline" size="sm" className="flex-1"><Trash2 className="w-4 h-4 mr-1" />Delete</Button>
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/post?edit=${item.id}`)}><Edit className="w-4 h-4 mr-1" />Edit</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    disabled={getBidCount(item) > 0 || deleteListing.isPending}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
+                      try {
+                        await deleteListing.mutateAsync({ id: item.id });
+                        toast.success('Listing deleted');
+                      } catch (err: any) {
+                        toast.error(err.message || 'Failed to delete listing');
+                      }
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />Delete
+                  </Button>
                 </div>
               </div>
             ))

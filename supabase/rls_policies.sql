@@ -80,3 +80,67 @@ create policy "Authenticated users can upload to own folder"
 create policy "Users can delete own images"
   on storage.objects for delete
   using (bucket_id = 'livestock-images' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- FAVORITES
+alter table public.favorites enable row level security;
+
+create policy "Users can view own favorites"
+  on public.favorites for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own favorites"
+  on public.favorites for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete own favorites"
+  on public.favorites for delete
+  using (auth.uid() = user_id);
+
+-- CONVERSATIONS
+alter table public.conversations enable row level security;
+
+create policy "Users can view own conversations"
+  on public.conversations for select
+  using (auth.uid() = participant_1 or auth.uid() = participant_2);
+
+create policy "Users can create conversations they are part of"
+  on public.conversations for insert
+  with check (auth.uid() = participant_1 or auth.uid() = participant_2);
+
+create policy "Users can update own conversations"
+  on public.conversations for update
+  using (auth.uid() = participant_1 or auth.uid() = participant_2);
+
+-- MESSAGES
+alter table public.messages enable row level security;
+
+create policy "Users can view messages in own conversations"
+  on public.messages for select
+  using (
+    exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id
+      and (c.participant_1 = auth.uid() or c.participant_2 = auth.uid())
+    )
+  );
+
+create policy "Users can insert messages in own conversations"
+  on public.messages for insert
+  with check (
+    auth.uid() = sender_id
+    and exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id
+      and (c.participant_1 = auth.uid() or c.participant_2 = auth.uid())
+    )
+  );
+
+create policy "Users can update own messages"
+  on public.messages for update
+  using (
+    exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id
+      and (c.participant_1 = auth.uid() or c.participant_2 = auth.uid())
+    )
+  );

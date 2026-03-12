@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -7,16 +7,28 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { categories, locations, healthStatuses, durations } from "../data/mockData";
-import { useCreateListing, useUploadImage } from "../../hooks/useLivestock";
+import { useCreateListing, useUploadImage, useLivestockItem, useUpdateListing } from "../../hooks/useLivestock";
 import { useAuthStore } from "../../stores/authStore";
 import { isSupabaseConfigured } from "../../lib/supabase";
 import { toast } from "sonner";
 
 export function PostListing() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit') || undefined;
+  const isEditMode = !!editId;
+
   const user = useAuthStore((s) => s.user);
   const createListing = useCreateListing();
+  const updateListing = useUpdateListing();
   const uploadImage = useUploadImage();
+  const { data: existingItem, isLoading: loadingItem } = useLivestockItem(editId);
+
+  const hasBids = useMemo(() => {
+    if (!existingItem) return false;
+    return (existingItem.bid_count ?? existingItem.bidCount ?? 0) > 0;
+  }, [existingItem]);
+
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [formData, setFormData] = useState({
@@ -31,6 +43,29 @@ export function PostListing() {
     startingPrice: '',
     duration: '',
   });
+  const [prefilled, setPrefilled] = useState(false);
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (isEditMode && existingItem && !prefilled) {
+      setFormData({
+        title: existingItem.title || '',
+        category: existingItem.category || '',
+        breed: existingItem.breed || '',
+        age: existingItem.age || '',
+        weight: existingItem.weight || '',
+        description: existingItem.description || '',
+        location: existingItem.location || '',
+        health: existingItem.health || '',
+        startingPrice: String(existingItem.starting_price ?? existingItem.startingPrice ?? ''),
+        duration: '',
+      });
+      const existingPhotos = existingItem.image_urls ?? existingItem.imageUrls ?? [];
+      setPhotos(existingPhotos);
+      setPhotoFiles([]);
+      setPrefilled(true);
+    }
+  }, [isEditMode, existingItem, prefilled]);
 
   const handlePhotoAdd = () => {
     if (photos.length >= 4) return;
@@ -86,7 +121,7 @@ export function PostListing() {
       { field: 'category', label: 'Category' },
       { field: 'location', label: 'Location' },
       { field: 'health', label: 'Health status' },
-      { field: 'duration', label: 'Duration' },
+      ...(!isEditMode ? [{ field: 'duration' as keyof typeof formData, label: 'Duration' }] : []),
     ];
 
     const missingFields = requiredSelects.filter(({ field }) => !formData[field]).map(({ label }) => label);
@@ -103,41 +138,73 @@ export function PostListing() {
     }
 
     try {
-      // Upload images if configured
+      // Upload new images if configured
       let imageUrls: string[] = [];
       if (isSupabaseConfigured && photoFiles.length > 0) {
+        // Keep existing remote URLs, upload only new files
+        const existingUrls = photos.filter(url => !url.startsWith('blob:'));
         for (const file of photoFiles) {
           const url = await uploadImage.mutateAsync({ file, userId: user.id });
-          imageUrls.push(url);
+          existingUrls.push(url);
         }
+        imageUrls = existingUrls;
       } else {
         imageUrls = photos;
       }
 
-      const durationMap: Record<string, number> = { '1 day': 1, '3 days': 3, '7 days': 7, '14 days': 14 };
+      if (isEditMode && editId) {
+        const updates: Record<string, any> = {
+          id: editId,
+          title: formData.title,
+          breed: formData.breed,
+          age: formData.age,
+          weight: formData.weight,
+          description: formData.description,
+          location: formData.location,
+          health: formData.health,
+          image_urls: imageUrls,
+        };
 
-      await createListing.mutateAsync({
-        title: formData.title,
-        category: formData.category,
-        breed: formData.breed,
-        age: formData.age,
-        weight: formData.weight,
-        description: formData.description,
-        location: formData.location,
-        health: formData.health,
-        starting_price: parsedPrice,
-        duration_days: durationMap[formData.duration] || 7,
-        image_urls: imageUrls,
-      });
+        if (!hasBids) {
+          updates.starting_price = parsedPrice;
+        }
 
-      toast.success('Listing submitted for review!');
+        await updateListing.mutateAsync(updates as any);
+        toast.success('Listing updated successfully!');
+      } else {
+        const durationMap: Record<string, number> = { '1 day': 1, '3 days': 3, '7 days': 7, '14 days': 14 };
+
+        await createListing.mutateAsync({
+          title: formData.title,
+          category: formData.category,
+          breed: formData.breed,
+          age: formData.age,
+          weight: formData.weight,
+          description: formData.description,
+          location: formData.location,
+          health: formData.health,
+          starting_price: parsedPrice,
+          duration_days: durationMap[formData.duration] || 7,
+          image_urls: imageUrls,
+        });
+        toast.success('Listing submitted for review!');
+      }
+
       setTimeout(() => navigate('/my-listings'), 1500);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create listing');
+      toast.error(err.message || (isEditMode ? 'Failed to update listing' : 'Failed to create listing'));
     }
   };
 
-  const isSubmitting = createListing.isPending || uploadImage.isPending;
+  const isSubmitting = createListing.isPending || updateListing.isPending || uploadImage.isPending;
+
+  if (isEditMode && loadingItem) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -145,7 +212,7 @@ export function PostListing() {
         <button onClick={() => navigate('/')}>
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1 className="font-semibold text-lg">Post Livestock</h1>
+        <h1 className="font-semibold text-lg">{isEditMode ? 'Edit Listing' : 'Post Livestock'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="p-4 space-y-6">
@@ -238,7 +305,7 @@ export function PostListing() {
           <h3 className="font-semibold">AUCTION DETAILS</h3>
           <div className="space-y-2">
             <Label htmlFor="price">Starting Price ($)</Label>
-            <Input id="price" type="number" placeholder="e.g., 800" value={formData.startingPrice} onChange={(e) => setFormData({ ...formData, startingPrice: e.target.value })} required />
+            <Input id="price" type="number" placeholder="e.g., 800" value={formData.startingPrice} onChange={(e) => setFormData({ ...formData, startingPrice: e.target.value })} required disabled={isEditMode && hasBids} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="duration">Duration</Label>
@@ -259,8 +326,8 @@ export function PostListing() {
         <div className="pt-4">
           <Button type="submit" className="w-full h-12" disabled={isSubmitting}>
             {isSubmitting ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Posting...</>
-            ) : 'Post Listing'}
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{isEditMode ? 'Updating...' : 'Posting...'}</>
+            ) : isEditMode ? 'Update Listing' : 'Post Listing'}
           </Button>
           <p className="text-xs text-center text-muted-foreground mt-2">Reviewed within 24hrs</p>
         </div>

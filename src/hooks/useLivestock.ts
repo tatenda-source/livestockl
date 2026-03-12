@@ -164,6 +164,105 @@ export function useWonItems() {
   });
 }
 
+export function useUpdateListing() {
+  const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: {
+      id: string;
+      title?: string;
+      breed?: string;
+      age?: string;
+      weight?: string;
+      description?: string;
+      location?: string;
+      health?: string;
+      starting_price?: number;
+      image_urls?: string[];
+    }) => {
+      if (!user) throw new Error('Not authenticated');
+
+      if (!isSupabaseConfigured) {
+        return { id, ...updates };
+      }
+
+      // If starting_price is being updated, verify bid_count is 0
+      if (updates.starting_price !== undefined) {
+        const { data: existing, error: fetchError } = await supabase
+          .from('livestock_items')
+          .select('bid_count')
+          .eq('id', id)
+          .single();
+
+        if (fetchError) throw fetchError;
+        if (existing.bid_count > 0) {
+          throw new Error('Cannot change starting price after bids have been placed');
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('livestock_items')
+        .update(updates)
+        .eq('id', id)
+        .eq('seller_id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['livestock'] });
+      queryClient.invalidateQueries({ queryKey: ['my-listings'] });
+    },
+  });
+}
+
+export function useDeleteListing() {
+  const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      if (!user) throw new Error('Not authenticated');
+
+      if (!isSupabaseConfigured) {
+        return { id };
+      }
+
+      // Verify the listing is deletable (active status and no bids)
+      const { data: existing, error: fetchError } = await supabase
+        .from('livestock_items')
+        .select('status, bid_count')
+        .eq('id', id)
+        .eq('seller_id', user.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (existing.status !== 'active') {
+        throw new Error('Can only delete active listings');
+      }
+      if (existing.bid_count > 0) {
+        throw new Error('Cannot delete a listing that has bids');
+      }
+
+      const { error } = await supabase
+        .from('livestock_items')
+        .delete()
+        .eq('id', id)
+        .eq('seller_id', user.id);
+
+      if (error) throw error;
+      return { id };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['livestock'] });
+      queryClient.invalidateQueries({ queryKey: ['my-listings'] });
+    },
+  });
+}
+
 export function useUploadImage() {
   return useMutation({
     mutationFn: async ({ file, userId }: { file: File; userId: string }) => {

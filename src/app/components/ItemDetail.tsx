@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { ArrowLeft, Heart, Share2, MapPin, Star, MessageCircle, Trophy, Loader2 } from "lucide-react";
 import { useLivestockItem } from "../../hooks/useLivestock";
 import { useBids, usePlaceBid } from "../../hooks/useBids";
+import { useStartConversation } from "../../hooks/useMessages";
 import { useAuthStore } from "../../stores/authStore";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -20,6 +21,7 @@ export function ItemDetail() {
   const { data: item, isLoading } = useLivestockItem(id);
   const { data: bids } = useBids(id);
   const placeBid = usePlaceBid();
+  const startConversation = useStartConversation();
 
   if (isLoading) {
     return (
@@ -56,6 +58,20 @@ export function ItemDetail() {
   };
 
   const seller = getSellerInfo();
+  const sellerId: string = (item as any).seller_id || (item as any).sellerId || '';
+
+  const handleChat = async () => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+    try {
+      const conv = await startConversation.mutateAsync({ sellerId, livestockId: id });
+      navigate(`/messages/${conv.id}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start conversation');
+    }
+  };
 
   const getTimeLeft = () => {
     if (item.timeLeft) return item.timeLeft;
@@ -165,8 +181,8 @@ export function ItemDetail() {
                   </div>
                 </div>
               </div>
-              <Button size="sm" variant="outline">
-                <MessageCircle className="w-4 h-4 mr-1" />Chat
+              <Button size="sm" variant="outline" onClick={handleChat} disabled={startConversation.isPending}>
+                <MessageCircle className="w-4 h-4 mr-1" />{startConversation.isPending ? '...' : 'Chat'}
               </Button>
             </div>
           </div>

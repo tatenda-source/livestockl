@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Heart, MapPin, Eye, MessageCircle, Gavel, CheckCircle, Loader2 } from "lucide-react";
 import { categories } from "../data/mockData";
 import { useLivestockList } from "../../hooks/useLivestock";
+import { useFavorites, useToggleFavorite } from "../../hooks/useFavorites";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
@@ -10,18 +11,10 @@ import { Avatar, AvatarFallback } from "./ui/avatar";
 export function HomeFeed() {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   const { data: livestock, isLoading, error } = useLivestockList(selectedCategory);
-
-  const toggleFavorite = (id: string) => {
-    setFavorites(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const { data: favoriteIds = [] } = useFavorites();
+  const { mutate: toggleFavorite } = useToggleFavorite();
 
   const getSellerInfo = (item: any) => {
     // Handle both mock data format and Supabase joined format
@@ -118,7 +111,7 @@ export function HomeFeed() {
                     onClick={(e) => { e.stopPropagation(); toggleFavorite(item.id); }}
                     className="absolute top-2 right-2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition-colors"
                   >
-                    <Heart className={`w-5 h-5 ${favorites.has(item.id) ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+                    <Heart className={`w-5 h-5 ${favoriteIds.includes(item.id) ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
                   </button>
                 </div>
 

@@ -249,3 +249,50 @@ drop trigger if exists payments_updated_at on public.payments;
 create trigger payments_updated_at
   before update on public.payments
   for each row execute function public.update_updated_at();
+
+-- Favorites / Wishlist
+create table if not exists public.favorites (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  livestock_id uuid not null references public.livestock_items(id) on delete cascade,
+  created_at timestamptz default now(),
+  constraint favorites_user_livestock_unique unique (user_id, livestock_id)
+);
+
+create index if not exists idx_favorites_user on public.favorites(user_id);
+create index if not exists idx_favorites_livestock on public.favorites(livestock_id);
+
+-- Conversations
+create table if not exists public.conversations (
+  id uuid primary key default gen_random_uuid(),
+  participant_1 uuid not null references public.profiles(id),
+  participant_2 uuid not null references public.profiles(id),
+  livestock_id uuid references public.livestock_items(id),
+  last_message_at timestamptz default now(),
+  created_at timestamptz default now(),
+  constraint unique_conversation unique (participant_1, participant_2, livestock_id)
+);
+
+-- Messages
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  sender_id uuid not null references public.profiles(id),
+  content text not null check (char_length(content) <= 2000),
+  read boolean default false,
+  created_at timestamptz default now()
+);
+
+-- Indexes for conversations and messages
+create index if not exists idx_conversations_participant_1 on public.conversations(participant_1);
+create index if not exists idx_conversations_participant_2 on public.conversations(participant_2);
+create index if not exists idx_messages_conversation on public.messages(conversation_id);
+create index if not exists idx_messages_sender on public.messages(sender_id);
+
+-- Enable Realtime for conversations and messages
+alter publication supabase_realtime add table public.conversations;
+alter publication supabase_realtime add table public.messages;
+
+-- To enable automatic auction expiry, enable pg_cron extension in Supabase dashboard
+-- then run:
+-- select cron.schedule('end-expired-auctions', '* * * * *', $$ select end_expired_auctions(); $$);

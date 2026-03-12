@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { Home, Plus, List, Bell, CreditCard, LogOut } from "lucide-react";
+import { Home, Plus, List, Bell, MessageCircle, CreditCard, LogOut } from "lucide-react";
 import { useUnreadCount } from "../../hooks/useNotifications";
 import { useAuthStore } from "../../stores/authStore";
 
@@ -14,6 +14,7 @@ export function Root() {
     { icon: Home, label: 'Home', path: '/' },
     { icon: Plus, label: 'Post', path: '/post' },
     { icon: List, label: 'List', path: '/my-listings' },
+    { icon: MessageCircle, label: 'Chat', path: '/messages' },
     { icon: Bell, label: 'Alert', path: '/notifications', badge: unreadCount || 0 },
     { icon: CreditCard, label: 'Pay', path: '/payments' },
   ];
@@ -37,7 +38,7 @@ export function Root() {
         <div className="flex items-center justify-around h-16">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/'));
 
             return (
               <button

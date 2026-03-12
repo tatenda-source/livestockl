@@ -9,6 +9,7 @@ import { PostListing } from "./components/PostListing";
 import { MyListings } from "./components/MyListings";
 import { PaymentHistory } from "./components/PaymentHistory";
 import { Notifications } from "./components/Notifications";
+import { MessagesScreen } from "./components/MessagesScreen";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 export const router = createBrowserRouter([
@@ -41,6 +42,14 @@ export const router = createBrowserRouter([
       {
         path: "notifications",
         element: <ProtectedRoute><Notifications /></ProtectedRoute>,
+      },
+      {
+        path: "messages",
+        element: <ProtectedRoute><MessagesScreen /></ProtectedRoute>,
+      },
+      {
+        path: "messages/:conversationId",
+        element: <ProtectedRoute><MessagesScreen /></ProtectedRoute>,
       },
       {
         path: "*",
