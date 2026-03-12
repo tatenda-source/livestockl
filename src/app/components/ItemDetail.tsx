@@ -78,14 +78,12 @@ export function ItemDetail() {
     userId: b.userId ?? b.user_id,
   }));
 
-  const isWinner = displayBids.some((b: any) => {
-    const bidUserId = b.userId;
-    const currentUserId = user?.id || 'user-1';
-    return bidUserId === currentUserId && b.isWinner;
-  });
+  const isWinner = user ? displayBids.some((b: any) => {
+    return b.userId === user.id && b.isWinner;
+  }) : false;
 
   const handlePlaceBid = async () => {
-    const amount = parseInt(bidAmount);
+    const amount = Number(bidAmount);
     if (amount < minBid) return;
 
     if (!user) {
@@ -222,7 +220,7 @@ export function ItemDetail() {
               </div>
               <Button
                 onClick={handlePlaceBid}
-                disabled={!bidAmount || parseInt(bidAmount) < minBid || placeBid.isPending}
+                disabled={!bidAmount || Number(bidAmount) < minBid || placeBid.isPending}
                 className="px-8"
               >
                 {placeBid.isPending ? 'Bidding...' : 'Bid Now'}

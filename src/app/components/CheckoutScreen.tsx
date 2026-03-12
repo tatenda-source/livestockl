@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Lock, Loader2 } from "lucide-react";
+import { ArrowLeft, Lock, Loader2, ShieldAlert } from "lucide-react";
 import { useLivestockItem } from "../../hooks/useLivestock";
+import { useBids } from "../../hooks/useBids";
 import { useInitiatePayment } from "../../hooks/usePayments";
 import { useAuthStore } from "../../stores/authStore";
 import { Button } from "./ui/button";
@@ -21,9 +22,19 @@ export function CheckoutScreen() {
   const [phoneNumber, setPhoneNumber] = useState(user?.phone || '');
 
   const { data: item, isLoading } = useLivestockItem(id);
+  const { data: bids, isLoading: bidsLoading } = useBids(id);
   const initiatePayment = useInitiatePayment();
 
-  if (isLoading) {
+  // Check if the current user has a winning bid on this item
+  const hasWinningBid = user && bids
+    ? bids.some((b: any) => {
+        const bidUserId = b.userId ?? b.user_id;
+        const isWinner = b.isWinner ?? b.is_winner;
+        return bidUserId === user.id && isWinner;
+      })
+    : false;
+
+  if (isLoading || bidsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -32,6 +43,22 @@ export function CheckoutScreen() {
   }
 
   if (!item) return <div className="p-4">Item not found</div>;
+
+  if (!user) {
+    navigate('/auth');
+    return null;
+  }
+
+  if (!hasWinningBid) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center gap-4">
+        <ShieldAlert className="w-12 h-12 text-destructive" />
+        <h2 className="text-xl font-semibold">Unauthorized</h2>
+        <p className="text-muted-foreground">You can only checkout items you have won at auction.</p>
+        <Button onClick={() => navigate('/')} variant="outline">Back to Home</Button>
+      </div>
+    );
+  }
 
   const currentBid = item.currentBid ?? (item as any).current_bid ?? 0;
   const imageUrl = item.imageUrl ?? (item as any).image_urls?.[0] ?? '';

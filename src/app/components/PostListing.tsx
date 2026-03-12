@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -53,15 +53,52 @@ export function PostListing() {
   };
 
   const handlePhotoRemove = (index: number) => {
+    const removedUrl = photos[index];
+    if (removedUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(removedUrl);
+    }
     setPhotos(photos.filter((_, i) => i !== index));
     setPhotoFiles(photoFiles.filter((_, i) => i !== index));
   };
+
+  // Revoke all object URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      photos.forEach((url) => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!user) {
       navigate('/auth');
+      return;
+    }
+
+    // Validate select fields
+    const requiredSelects: { field: keyof typeof formData; label: string }[] = [
+      { field: 'category', label: 'Category' },
+      { field: 'location', label: 'Location' },
+      { field: 'health', label: 'Health status' },
+      { field: 'duration', label: 'Duration' },
+    ];
+
+    const missingFields = requiredSelects.filter(({ field }) => !formData[field]).map(({ label }) => label);
+    if (missingFields.length > 0) {
+      toast.error(`Please select: ${missingFields.join(', ')}`);
+      return;
+    }
+
+    // Validate starting price
+    const parsedPrice = parseFloat(formData.startingPrice);
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      toast.error('Starting price must be a positive number');
       return;
     }
 
@@ -88,7 +125,7 @@ export function PostListing() {
         description: formData.description,
         location: formData.location,
         health: formData.health,
-        starting_price: parseFloat(formData.startingPrice),
+        starting_price: parsedPrice,
         duration_days: durationMap[formData.duration] || 7,
         image_urls: imageUrls,
       });

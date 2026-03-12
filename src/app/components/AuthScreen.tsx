@@ -83,6 +83,7 @@ export function AuthScreen() {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
+                    minLength={6}
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
@@ -126,6 +127,8 @@ export function AuthScreen() {
                     value={signupData.phone}
                     onChange={(e) => setSignupData({ ...signupData, phone: e.target.value })}
                     required
+                    pattern="0[17][0-9]{8}"
+                    title="Enter a valid Zimbabwe phone number (e.g. 0771234567)"
                   />
                 </div>
                 <div className="space-y-2">
@@ -148,6 +151,7 @@ export function AuthScreen() {
                     value={signupData.password}
                     onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
                     required
+                    minLength={6}
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>

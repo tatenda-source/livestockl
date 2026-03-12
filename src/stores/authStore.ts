@@ -30,6 +30,7 @@ export const useAuthStore = create<AuthState>()(
         if (get().initialized) return;
 
         if (!isSupabaseConfigured) {
+          // Demo mode: persisted user is fine since there's no real security
           set({ initialized: true });
           return;
         }
@@ -37,6 +38,13 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
+            const persistedUser = get().user;
+            // Validate persisted user matches server session to prevent session forgery
+            if (persistedUser && persistedUser.id !== session.user.id) {
+              // Persisted user doesn't match server session — clear it
+              set({ user: null });
+            }
+
             const { data: profile } = await supabase
               .from('profiles')
               .select('*')
@@ -45,10 +53,12 @@ export const useAuthStore = create<AuthState>()(
 
             set({ user: profile, initialized: true });
           } else {
-            set({ initialized: true });
+            // No valid server session — clear any persisted user
+            set({ user: null, initialized: true });
           }
         } catch {
-          set({ initialized: true });
+          // On error, clear persisted user to be safe
+          set({ user: null, initialized: true });
         }
 
         // Clean up any existing subscription before creating new one

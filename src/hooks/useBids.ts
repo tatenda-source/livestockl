@@ -57,6 +57,8 @@ export function usePlaceBid() {
 
   return useMutation({
     mutationFn: async ({ livestockId, amount }: { livestockId: string; amount: number }) => {
+      if (!user) throw new Error('Not authenticated');
+
       if (!isSupabaseConfigured) {
         return { id: 'mock-bid-' + Date.now(), amount };
       }

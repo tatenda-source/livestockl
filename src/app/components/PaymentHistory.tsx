@@ -1,4 +1,4 @@
-import { CheckCircle, Clock, Loader2 } from "lucide-react";
+import { CheckCircle, Clock, Loader2, XCircle } from "lucide-react";
 import { usePaymentHistory } from "../../hooks/usePayments";
 import { Badge } from "./ui/badge";
 
@@ -36,7 +36,7 @@ export function PaymentHistory() {
                   ) : payment.status === 'pending' ? (
                     <Clock className="w-5 h-5 text-yellow-600" />
                   ) : (
-                    <CheckCircle className="w-5 h-5 text-red-600" />
+                    <XCircle className="w-5 h-5 text-red-600" />
                   )}
                   <div>
                     <p className="font-semibold font-mono text-sm">{payment.reference}</p>

@@ -71,6 +71,27 @@ export function useUnreadCount() {
   });
 }
 
+export function useDeleteNotification() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!isSupabaseConfigured) return;
+
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+    },
+  });
+}
+
 export function useMarkAllRead() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);

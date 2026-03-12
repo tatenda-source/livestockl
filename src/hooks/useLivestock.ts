@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockLivestock } from '../app/data/mockData';
 import { useAuthStore } from '../stores/authStore';
@@ -32,7 +33,9 @@ export function useLivestockList(category?: string) {
 }
 
 export function useLivestockItem(id: string | undefined) {
-  return useQuery({
+  const viewCountedRef = useRef<string | null>(null);
+
+  const query = useQuery({
     queryKey: ['livestock', id],
     enabled: !!id,
     queryFn: async () => {
@@ -50,12 +53,19 @@ export function useLivestockItem(id: string | undefined) {
 
       if (error) throw error;
 
-      // Increment view count atomically
-      supabase.rpc('increment_view_count', { p_item_id: id! }).then();
-
       return data;
     },
   });
+
+  // Increment view count once per item ID, outside of queryFn
+  useEffect(() => {
+    if (id && isSupabaseConfigured && viewCountedRef.current !== id) {
+      viewCountedRef.current = id;
+      supabase.rpc('increment_view_count', { p_item_id: id }).then();
+    }
+  }, [id]);
+
+  return query;
 }
 
 export function useCreateListing() {
@@ -76,6 +86,8 @@ export function useCreateListing() {
       duration_days: number;
       image_urls: string[];
     }) => {
+      if (!user) throw new Error('Not authenticated');
+
       if (!isSupabaseConfigured) {
         return { id: 'mock-' + Date.now() };
       }
@@ -136,7 +148,7 @@ export function useWonItems() {
     queryFn: async () => {
       if (!isSupabaseConfigured) {
         return mockLivestock.filter(item =>
-          item.bids.some(bid => bid.userId === 'user-1' && bid.isWinner)
+          item.bids.some(bid => bid.userId === user?.id && bid.isWinner)
         );
       }
 

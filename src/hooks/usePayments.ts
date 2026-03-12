@@ -68,6 +68,8 @@ export function useInitiatePayment() {
       method: 'EcoCash' | 'OneMoney' | 'Card';
       phone?: string;
     }) => {
+      if (!user) throw new Error('Not authenticated');
+
       const reference = `ZL-${Date.now().toString(36).toUpperCase()}`;
 
       if (!isSupabaseConfigured) {

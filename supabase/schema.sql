@@ -127,6 +127,11 @@ declare
   v_item record;
   v_bid_id uuid;
 begin
+  -- Verify the caller is the user they claim to be (prevents RLS bypass)
+  IF p_user_id != auth.uid() THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
   -- Lock the item row to prevent concurrent bid races
   select * into v_item
   from public.livestock_items

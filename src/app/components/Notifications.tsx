@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { X, CheckCheck, Loader2 } from "lucide-react";
-import { useNotifications, useMarkAllRead } from "../../hooks/useNotifications";
+import { useNotifications, useMarkAllRead, useDeleteNotification } from "../../hooks/useNotifications";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
 export function Notifications() {
   const { data: notifications, isLoading } = useNotifications();
   const markAllRead = useMarkAllRead();
+  const deleteNotification = useDeleteNotification();
   const [filter, setFilter] = useState<string>('all');
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  const items = (notifications || []).filter((n: any) => !dismissed.has(n.id));
+  const items = notifications || [];
   const unreadCount = items.filter((n: any) => !n.read).length;
 
   const filteredNotifications = filter === 'all'
@@ -27,7 +27,7 @@ export function Notifications() {
   };
 
   const dismissNotification = (id: string) => {
-    setDismissed(prev => new Set([...prev, id]));
+    deleteNotification.mutate(id);
   };
 
   const formatTime = (timestamp: Date | string) => {
