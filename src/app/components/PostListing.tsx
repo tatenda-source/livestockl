@@ -1,0 +1,255 @@
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { ArrowLeft, Plus, X } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { categories, locations, healthStatuses, durations } from "../data/mockData";
+import { toast } from "sonner";
+
+export function PostListing() {
+  const navigate = useNavigate();
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [formData, setFormData] = useState({
+    title: '',
+    category: '',
+    breed: '',
+    age: '',
+    weight: '',
+    description: '',
+    location: '',
+    health: '',
+    startingPrice: '',
+    duration: '',
+  });
+
+  const handlePhotoAdd = () => {
+    if (photos.length < 4) {
+      // In a real app, this would open file picker
+      setPhotos([...photos, `https://via.placeholder.com/200?text=Photo+${photos.length + 1}`]);
+    }
+  };
+
+  const handlePhotoRemove = (index: number) => {
+    setPhotos(photos.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Submit listing logic
+    toast.success('Listing submitted for review!');
+    setTimeout(() => navigate('/my-listings'), 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-background pb-20">
+      {/* Header */}
+      <div className="sticky top-0 bg-background z-10 border-b p-4 flex items-center gap-3">
+        <button onClick={() => navigate('/')}>
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h1 className="font-semibold text-lg">Post Livestock</h1>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="p-4 space-y-6">
+        {/* Photos */}
+        <div>
+          <Label className="mb-3 block">PHOTOS</Label>
+          <div className="grid grid-cols-4 gap-3">
+            {photos.map((photo, index) => (
+              <div key={index} className="relative aspect-square bg-muted rounded-lg overflow-hidden">
+                <img src={photo} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => handlePhotoRemove(index)}
+                  className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            {photos.length < 4 && (
+              <button
+                type="button"
+                onClick={handlePhotoAdd}
+                className="aspect-square bg-muted rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary transition-colors"
+              >
+                <Plus className="w-8 h-8 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">Up to 4 photos</p>
+        </div>
+
+        {/* Basic Info */}
+        <div className="space-y-4">
+          <h3 className="font-semibold">BASIC INFO</h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              placeholder="e.g., Ngoni Bull"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="category">Category</Label>
+            <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="breed">Breed</Label>
+            <Input
+              id="breed"
+              placeholder="e.g., Brahman"
+              value={formData.breed}
+              onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="age">Age</Label>
+              <Input
+                id="age"
+                placeholder="e.g., 3 yrs"
+                value={formData.age}
+                onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="weight">Weight</Label>
+              <Input
+                id="weight"
+                placeholder="e.g., 450 kg"
+                value={formData.weight}
+                onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              placeholder="Describe your livestock..."
+              rows={4}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              required
+            />
+          </div>
+        </div>
+
+        {/* Location & Health */}
+        <div className="space-y-4">
+          <h3 className="font-semibold">LOCATION & HEALTH</h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="location">Location</Label>
+            <Select value={formData.location} onValueChange={(v) => setFormData({ ...formData, location: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select location" />
+              </SelectTrigger>
+              <SelectContent>
+                {locations.map(loc => (
+                  <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="health">Health</Label>
+            <Select value={formData.health} onValueChange={(v) => setFormData({ ...formData, health: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select health status" />
+              </SelectTrigger>
+              <SelectContent>
+                {healthStatuses.map(status => (
+                  <SelectItem key={status} value={status}>{status}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Auction Details */}
+        <div className="space-y-4">
+          <h3 className="font-semibold">AUCTION DETAILS</h3>
+          
+          <div className="space-y-2">
+            <Label htmlFor="price">Starting Price ($)</Label>
+            <Input
+              id="price"
+              type="number"
+              placeholder="e.g., 800"
+              value={formData.startingPrice}
+              onChange={(e) => setFormData({ ...formData, startingPrice: e.target.value })}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="duration">Duration</Label>
+            <Select value={formData.duration} onValueChange={(v) => setFormData({ ...formData, duration: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select duration" />
+              </SelectTrigger>
+              <SelectContent>
+                {durations.map(dur => (
+                  <SelectItem key={dur} value={dur}>{dur}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Info Box */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-1 text-sm">
+            <p className="flex items-center gap-2">
+              <span>ℹ️</span>
+              <span>5% platform fee</span>
+            </p>
+            <p className="flex items-center gap-2">
+              <span>ℹ️</span>
+              <span>48hr payment window</span>
+            </p>
+            <p className="flex items-center gap-2">
+              <span>ℹ️</span>
+              <span>Inspection allowed</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Submit Button */}
+        <div className="pt-4">
+          <Button type="submit" className="w-full h-12">
+            Post Listing
+          </Button>
+          <p className="text-xs text-center text-muted-foreground mt-2">
+            Reviewed within 24hrs
+          </p>
+        </div>
+      </form>
+    </div>
+  );
+}
