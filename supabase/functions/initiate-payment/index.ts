@@ -1,0 +1,144 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const { reference, amount, method, phone } = await req.json();
+
+    const integrationId = Deno.env.get("PAYNOW_INTEGRATION_ID");
+    const integrationKey = Deno.env.get("PAYNOW_INTEGRATION_KEY");
+    const resultUrl = Deno.env.get("PAYNOW_RESULT_URL");
+    const returnUrl = Deno.env.get("PAYNOW_RETURN_URL");
+
+    if (!integrationId || !integrationKey) {
+      return new Response(
+        JSON.stringify({ error: "Paynow not configured", reference }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Build Paynow initiate request
+    const values: Record<string, string> = {
+      id: integrationId,
+      reference,
+      amount: amount.toString(),
+      returnurl: returnUrl || `${req.headers.get("origin")}/payment-status/${reference}`,
+      resulturl: resultUrl || "",
+      status: "Message",
+    };
+
+    // Create hash
+    const hashString = Object.values(values).join("") + integrationKey;
+    const encoder = new TextEncoder();
+    const data = encoder.encode(hashString);
+    const hashBuffer = await crypto.subtle.digest("SHA-512", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    values.hash = hash.toUpperCase();
+
+    // For mobile payments (EcoCash/OneMoney), use the mobile endpoint
+    if ((method === "EcoCash" || method === "OneMoney") && phone) {
+      values.phone = phone;
+      values.method = method === "EcoCash" ? "ecocash" : "onemoney";
+      values.authemail = ""; // Required field for mobile
+
+      const formBody = new URLSearchParams(values).toString();
+      const paynowResponse = await fetch(
+        "https://www.paynow.co.zw/interface/remotetransaction",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formBody,
+        }
+      );
+
+      const responseText = await paynowResponse.text();
+      const parsed = Object.fromEntries(new URLSearchParams(responseText));
+
+      if (parsed.status?.toLowerCase() === "ok") {
+        // Update payment record with Paynow reference
+        const supabase = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        );
+
+        await supabase
+          .from("payments")
+          .update({
+            paynow_reference: parsed.paynowreference,
+            status: "pending",
+          })
+          .eq("reference", reference);
+
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            pollUrl: parsed.pollurl,
+            paynowReference: parsed.paynowreference,
+            instructions: parsed.instructions || "Check your phone for a USSD prompt",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ error: parsed.error || "Paynow request failed" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Web payment — redirect to Paynow checkout
+    const formBody = new URLSearchParams(values).toString();
+    const paynowResponse = await fetch(
+      "https://www.paynow.co.zw/interface/initiatetransaction",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody,
+      }
+    );
+
+    const responseText = await paynowResponse.text();
+    const parsed = Object.fromEntries(new URLSearchParams(responseText));
+
+    if (parsed.status?.toLowerCase() === "ok") {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      await supabase
+        .from("payments")
+        .update({ paynow_reference: parsed.paynowreference })
+        .eq("reference", reference);
+
+      return new Response(
+        JSON.stringify({
+          status: "ok",
+          redirectUrl: parsed.browserurl,
+          pollUrl: parsed.pollurl,
+          paynowReference: parsed.paynowreference,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ error: parsed.error || "Paynow request failed" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: (err as Error).message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});

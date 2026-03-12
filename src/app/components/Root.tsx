@@ -1,29 +1,26 @@
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Home, Plus, List, Bell, CreditCard } from "lucide-react";
-import { mockNotifications } from "../data/mockData";
+import { useUnreadCount } from "../../hooks/useNotifications";
 
 export function Root() {
   const location = useLocation();
   const navigate = useNavigate();
-
-  const unreadCount = mockNotifications.filter(n => !n.read).length;
+  const { data: unreadCount } = useUnreadCount();
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
     { icon: Plus, label: 'Post', path: '/post' },
     { icon: List, label: 'List', path: '/my-listings' },
-    { icon: Bell, label: 'Alert', path: '/notifications', badge: unreadCount },
+    { icon: Bell, label: 'Alert', path: '/notifications', badge: unreadCount || 0 },
     { icon: CreditCard, label: 'Pay', path: '/payments' },
   ];
 
   return (
     <div className="h-screen flex flex-col bg-background max-w-[480px] mx-auto">
-      {/* Main content area */}
       <div className="flex-1 overflow-y-auto">
         <Outlet />
       </div>
 
-      {/* Bottom Navigation */}
       <nav className="border-t bg-card shadow-lg">
         <div className="flex items-center justify-around h-16">
           {navItems.map((item) => {

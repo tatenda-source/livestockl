@@ -5,29 +5,45 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
+import { useAuthStore } from "../../stores/authStore";
+import { toast } from "sonner";
 
 export function AuthScreen() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const { login, signup, loading } = useAuthStore();
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [signupData, setSignupData] = useState({
+    firstName: '',
+    lastName: '',
+    phone: '',
+    email: '',
+    password: '',
+  });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    // Simulate login
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await login(loginEmail, loginPassword);
       navigate('/');
-    }, 1000);
+    } catch (err: any) {
+      toast.error(err.message || 'Login failed');
+    }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    // Simulate signup
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await signup(signupData.email, signupData.password, {
+        first_name: signupData.firstName,
+        last_name: signupData.lastName,
+        phone: signupData.phone,
+      });
+      toast.success('Account created! Check your email to confirm.');
       navigate('/');
-    }, 1000);
+    } catch (err: any) {
+      toast.error(err.message || 'Signup failed');
+    }
   };
 
   return (
@@ -44,15 +60,17 @@ export function AuthScreen() {
               <TabsTrigger value="login">Login</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="login-email">Phone or Email</Label>
+                  <Label htmlFor="login-email">Email</Label>
                   <Input
                     id="login-email"
-                    type="text"
-                    placeholder="0771234567 or email@example.com"
+                    type="email"
+                    placeholder="email@example.com"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
                     required
                   />
                 </div>
@@ -62,6 +80,8 @@ export function AuthScreen() {
                     id="login-password"
                     type="password"
                     placeholder="Enter your password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
                     required
                   />
                 </div>
@@ -70,7 +90,7 @@ export function AuthScreen() {
                 </Button>
               </form>
             </TabsContent>
-            
+
             <TabsContent value="signup">
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -80,6 +100,8 @@ export function AuthScreen() {
                       id="first-name"
                       type="text"
                       placeholder="John"
+                      value={signupData.firstName}
+                      onChange={(e) => setSignupData({ ...signupData, firstName: e.target.value })}
                       required
                     />
                   </div>
@@ -89,6 +111,8 @@ export function AuthScreen() {
                       id="last-name"
                       type="text"
                       placeholder="Doe"
+                      value={signupData.lastName}
+                      onChange={(e) => setSignupData({ ...signupData, lastName: e.target.value })}
                       required
                     />
                   </div>
@@ -99,6 +123,8 @@ export function AuthScreen() {
                     id="signup-phone"
                     type="tel"
                     placeholder="0771234567"
+                    value={signupData.phone}
+                    onChange={(e) => setSignupData({ ...signupData, phone: e.target.value })}
                     required
                   />
                 </div>
@@ -108,6 +134,8 @@ export function AuthScreen() {
                     id="signup-email"
                     type="email"
                     placeholder="email@example.com"
+                    value={signupData.email}
+                    onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
                     required
                   />
                 </div>
@@ -117,6 +145,8 @@ export function AuthScreen() {
                     id="signup-password"
                     type="password"
                     placeholder="Create a password"
+                    value={signupData.password}
+                    onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
                     required
                   />
                 </div>

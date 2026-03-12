@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Heart, MapPin, User, Eye, MessageCircle, Gavel, CheckCircle } from "lucide-react";
-import { mockLivestock, categories, type Livestock } from "../data/mockData";
+import { Heart, MapPin, Eye, MessageCircle, Gavel, CheckCircle, Loader2 } from "lucide-react";
+import { categories } from "../data/mockData";
+import { useLivestockList } from "../../hooks/useLivestock";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
@@ -11,32 +12,59 @@ export function HomeFeed() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
-  const filteredLivestock = selectedCategory === 'All'
-    ? mockLivestock
-    : mockLivestock.filter(item => item.category === selectedCategory);
+  const { data: livestock, isLoading, error } = useLivestockList(selectedCategory);
 
   const toggleFavorite = (id: string) => {
     setFavorites(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
+  const getSellerInfo = (item: any) => {
+    // Handle both mock data format and Supabase joined format
+    if (item.seller) return item.seller;
+    if (item.profiles) {
+      const p = item.profiles;
+      return {
+        name: `${p.first_name} ${p.last_name?.charAt(0) || ''}.`,
+        avatar: `${p.first_name?.charAt(0) || ''}${p.last_name?.charAt(0) || ''}`,
+        verified: p.verified,
+        rating: p.rating,
+        salesCount: p.sales_count,
+      };
+    }
+    return { name: 'Seller', avatar: 'S', verified: false, rating: 0, salesCount: 0 };
+  };
+
+  const getTimeLeft = (item: any) => {
+    if (item.timeLeft) return item.timeLeft;
+    if (item.end_time) {
+      const diff = new Date(item.end_time).getTime() - Date.now();
+      if (diff <= 0) return 'Ended';
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      if (hours < 24) return `${hours}h`;
+      return `${Math.floor(hours / 24)}d`;
+    }
+    return '';
+  };
+
+  const getCurrentBid = (item: any) => item.currentBid ?? item.current_bid ?? 0;
+  const getImageUrl = (item: any) => item.imageUrl ?? item.image_urls?.[0] ?? '';
+  const getBidCount = (item: any) => item.bidCount ?? item.bid_count ?? 0;
+  const getViewCount = (item: any) => item.viewCount ?? item.view_count ?? 0;
+  const getStartingPrice = (item: any) => item.startingPrice ?? item.starting_price ?? 0;
+
   return (
     <div className="min-h-screen bg-background pb-4">
-      {/* Sticky Header */}
       <div className="sticky top-0 bg-background z-10 border-b shadow-sm">
         <div className="p-4">
           <h1 className="text-xl font-semibold">Livestock Marketplace</h1>
           <p className="text-sm text-muted-foreground">Find your next animal</p>
         </div>
 
-        {/* Category Filter Pills */}
         <div className="px-4 pb-3 overflow-x-auto">
           <div className="flex gap-2 min-w-max">
             <Badge
@@ -60,142 +88,96 @@ export function HomeFeed() {
         </div>
       </div>
 
-      {/* Livestock Cards */}
       <div className="px-4 pt-4 space-y-4">
-        {filteredLivestock.map(item => (
-          <LivestockCard
-            key={item.id}
-            item={item}
-            isFavorite={favorites.has(item.id)}
-            onToggleFavorite={() => toggleFavorite(item.id)}
-            onCardClick={() => navigate(`/item/${item.id}`)}
-            onBidClick={() => navigate(`/item/${item.id}`)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface LivestockCardProps {
-  item: Livestock;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
-  onCardClick: () => void;
-  onBidClick: () => void;
-}
-
-function LivestockCard({ item, isFavorite, onToggleFavorite, onCardClick, onBidClick }: LivestockCardProps) {
-  return (
-    <div className="bg-card rounded-lg shadow-md overflow-hidden border">
-      {/* Image Section */}
-      <div className="relative aspect-[4/3] bg-muted cursor-pointer" onClick={onCardClick}>
-        <img
-          src={item.imageUrl}
-          alt={item.title}
-          className="w-full h-full object-cover"
-        />
-        
-        {/* Breed Badge (bottom-left) */}
-        <div className="absolute bottom-2 left-2">
-          <Badge className="bg-black/70 text-white border-0">
-            {item.breed}
-          </Badge>
-        </div>
-        
-        {/* Time Left Badge (bottom-right) */}
-        <div className="absolute bottom-2 right-2">
-          <Badge variant="destructive" className="font-semibold">
-            {item.timeLeft} ⏱
-          </Badge>
-        </div>
-        
-        {/* Favorite Button (top-right) */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite();
-          }}
-          className="absolute top-2 right-2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition-colors"
-        >
-          <Heart
-            className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-600'}`}
-          />
-        </button>
-      </div>
-
-      {/* Content Section */}
-      <div className="p-4 space-y-3">
-        {/* Title & Bid */}
-        <div>
-          <h3 className="font-semibold text-lg">{item.title}</h3>
-          <p className="text-xl font-bold text-primary">
-            Current Bid: ${item.currentBid.toLocaleString()}
-          </p>
-        </div>
-
-        {/* Details Row */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <MapPin className="w-4 h-4" />
-            <span>{item.location}</span>
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-          <span>•</span>
-          <span>{item.age}</span>
-          <span>•</span>
-          <span>{item.weight}</span>
-        </div>
-
-        {/* Seller Info */}
-        <div className="flex items-center gap-2">
-          <Avatar className="w-8 h-8">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-              {item.seller.avatar}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex items-center gap-1">
-            <span className="text-sm font-medium">{item.seller.name}</span>
-            {item.seller.verified && (
-              <CheckCircle className="w-4 h-4 text-primary fill-primary" />
-            )}
+        ) : error ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>Failed to load listings</p>
           </div>
-        </div>
-
-        {/* Stats */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Gavel className="w-4 h-4" />
-            <span>{item.bidCount} bids</span>
+        ) : !livestock?.length ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <p>No listings found</p>
           </div>
-          <div className="flex items-center gap-1">
-            <Eye className="w-4 h-4" />
-            <span>{item.viewCount} views</span>
-          </div>
-        </div>
+        ) : (
+          livestock.map((item: any) => {
+            const seller = getSellerInfo(item);
+            return (
+              <div key={item.id} className="bg-card rounded-lg shadow-md overflow-hidden border">
+                <div className="relative aspect-[4/3] bg-muted cursor-pointer" onClick={() => navigate(`/item/${item.id}`)}>
+                  <img src={getImageUrl(item)} alt={item.title} className="w-full h-full object-cover" />
+                  <div className="absolute bottom-2 left-2">
+                    <Badge className="bg-black/70 text-white border-0">{item.breed}</Badge>
+                  </div>
+                  <div className="absolute bottom-2 right-2">
+                    <Badge variant="destructive" className="font-semibold">{getTimeLeft(item)} ⏱</Badge>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleFavorite(item.id); }}
+                    className="absolute top-2 right-2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition-colors"
+                  >
+                    <Heart className={`w-5 h-5 ${favorites.has(item.id) ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+                  </button>
+                </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-2">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              // Message functionality
-            }}
-          >
-            <MessageCircle className="w-4 h-4 mr-2" />
-            Message
-          </Button>
-          <Button
-            className="flex-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              onBidClick();
-            }}
-          >
-            Place Bid
-          </Button>
-        </div>
+                <div className="p-4 space-y-3">
+                  <div>
+                    <h3 className="font-semibold text-lg">{item.title}</h3>
+                    <p className="text-xl font-bold text-primary">
+                      Current Bid: ${getCurrentBid(item).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />
+                      <span>{item.location}</span>
+                    </div>
+                    <span>•</span>
+                    <span>{item.age}</span>
+                    <span>•</span>
+                    <span>{item.weight}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                        {seller.avatar}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-medium">{seller.name}</span>
+                      {seller.verified && <CheckCircle className="w-4 h-4 text-primary fill-primary" />}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Gavel className="w-4 h-4" />
+                      <span>{getBidCount(item)} bids</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Eye className="w-4 h-4" />
+                      <span>{getViewCount(item)} views</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={(e) => e.stopPropagation()}>
+                      <MessageCircle className="w-4 h-4 mr-2" />
+                      Message
+                    </Button>
+                    <Button className="flex-1" onClick={(e) => { e.stopPropagation(); navigate(`/item/${item.id}`); }}>
+                      Place Bid
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

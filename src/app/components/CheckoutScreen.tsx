@@ -1,71 +1,90 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Lock } from "lucide-react";
-import { mockLivestock, currentUser } from "../data/mockData";
+import { ArrowLeft, Lock, Loader2 } from "lucide-react";
+import { useLivestockItem } from "../../hooks/useLivestock";
+import { useInitiatePayment } from "../../hooks/usePayments";
+import { useAuthStore } from "../../stores/authStore";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Separator } from "./ui/separator";
+import { toast } from "sonner";
 
 type PaymentMethod = 'ecocash' | 'onemoney' | 'card';
 
 export function CheckoutScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ecocash');
-  const [phoneNumber, setPhoneNumber] = useState(currentUser.phone);
+  const [phoneNumber, setPhoneNumber] = useState(user?.phone || '');
 
-  const item = mockLivestock.find(i => i.id === id);
+  const { data: item, isLoading } = useLivestockItem(id);
+  const initiatePayment = useInitiatePayment();
 
-  if (!item) {
-    return <div className="p-4">Item not found</div>;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
-  const platformFee = Math.round(item.currentBid * 0.05);
-  const total = item.currentBid + platformFee;
+  if (!item) return <div className="p-4">Item not found</div>;
 
-  const handlePay = () => {
-    // Generate payment reference
-    const ref = `ZL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    navigate(`/payment-status/${ref}?method=${paymentMethod}&amount=${total}`);
+  const currentBid = item.currentBid ?? (item as any).current_bid ?? 0;
+  const imageUrl = item.imageUrl ?? (item as any).image_urls?.[0] ?? '';
+  const platformFee = Math.round(currentBid * 0.05);
+  const total = currentBid + platformFee;
+
+  const methodMap: Record<PaymentMethod, 'EcoCash' | 'OneMoney' | 'Card'> = {
+    ecocash: 'EcoCash',
+    onemoney: 'OneMoney',
+    card: 'Card',
+  };
+
+  const handlePay = async () => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    try {
+      const result = await initiatePayment.mutateAsync({
+        livestockId: id!,
+        amount: total,
+        method: methodMap[paymentMethod],
+        phone: phoneNumber || undefined,
+      });
+
+      navigate(`/payment-status/${result.reference}?method=${paymentMethod}&amount=${total}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Payment initiation failed');
+    }
   };
 
   const getInstructions = () => {
     switch (paymentMethod) {
-      case 'ecocash':
-        return "You'll receive a USSD prompt on your phone. Dial *151# if you miss it.";
-      case 'onemoney':
-        return "You'll receive a USSD prompt on your phone. Follow the instructions to complete payment.";
-      case 'card':
-        return "You'll be redirected to Paynow's secure payment page.";
-      default:
-        return "";
+      case 'ecocash': return "You'll receive a USSD prompt on your phone. Dial *151# if you miss it.";
+      case 'onemoney': return "You'll receive a USSD prompt on your phone. Follow the instructions to complete payment.";
+      case 'card': return "You'll be redirected to Paynow's secure payment page.";
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="sticky top-0 bg-background z-10 border-b p-4 flex items-center gap-3">
-        <button onClick={() => navigate(-1)}>
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <button onClick={() => navigate(-1)}><ArrowLeft className="w-5 h-5" /></button>
         <h1 className="font-semibold text-lg">Checkout</h1>
       </div>
 
-      {/* Content */}
       <div className="p-4 space-y-6 pb-32">
-        {/* Order Summary */}
         <div>
           <h2 className="font-semibold mb-3">ORDER SUMMARY</h2>
           <div className="bg-card border rounded-lg p-4 flex gap-3">
             <div className="w-20 h-20 bg-muted rounded-lg overflow-hidden flex-shrink-0">
-              <img
-                src={item.imageUrl}
-                alt={item.title}
-                className="w-full h-full object-cover"
-              />
+              <img src={imageUrl} alt={item.title} className="w-full h-full object-cover" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold truncate">{item.title}</h3>
@@ -75,11 +94,10 @@ export function CheckoutScreen() {
           </div>
         </div>
 
-        {/* Price Breakdown */}
         <div className="space-y-3">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Winning Bid</span>
-            <span className="font-semibold">${item.currentBid.toLocaleString()}</span>
+            <span className="font-semibold">${currentBid.toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Platform Fee (5%)</span>
@@ -94,55 +112,28 @@ export function CheckoutScreen() {
 
         <Separator className="my-6" />
 
-        {/* Payment Method */}
         <div>
           <h2 className="font-semibold mb-3">PAYMENT METHOD</h2>
           <RadioGroup value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
             <div className="space-y-3">
-              {/* EcoCash */}
-              <label
-                htmlFor="ecocash"
-                className={`flex items-center gap-3 border rounded-lg p-4 cursor-pointer transition-colors ${
-                  paymentMethod === 'ecocash' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground'
-                }`}
-              >
+              <label htmlFor="ecocash" className={`flex items-center gap-3 border rounded-lg p-4 cursor-pointer transition-colors ${paymentMethod === 'ecocash' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground'}`}>
                 <RadioGroupItem value="ecocash" id="ecocash" />
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-[#00A651] flex items-center justify-center text-white font-bold text-xs">
-                    EC
-                  </div>
+                  <div className="w-8 h-8 rounded bg-[#00A651] flex items-center justify-center text-white font-bold text-xs">EC</div>
                   <span className="font-medium">EcoCash</span>
                 </div>
               </label>
-
-              {/* OneMoney */}
-              <label
-                htmlFor="onemoney"
-                className={`flex items-center gap-3 border rounded-lg p-4 cursor-pointer transition-colors ${
-                  paymentMethod === 'onemoney' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground'
-                }`}
-              >
+              <label htmlFor="onemoney" className={`flex items-center gap-3 border rounded-lg p-4 cursor-pointer transition-colors ${paymentMethod === 'onemoney' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground'}`}>
                 <RadioGroupItem value="onemoney" id="onemoney" />
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-[#0072BC] flex items-center justify-center text-white font-bold text-xs">
-                    OM
-                  </div>
+                  <div className="w-8 h-8 rounded bg-[#0072BC] flex items-center justify-center text-white font-bold text-xs">OM</div>
                   <span className="font-medium">OneMoney</span>
                 </div>
               </label>
-
-              {/* Card */}
-              <label
-                htmlFor="card"
-                className={`flex items-center gap-3 border rounded-lg p-4 cursor-pointer transition-colors ${
-                  paymentMethod === 'card' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground'
-                }`}
-              >
+              <label htmlFor="card" className={`flex items-center gap-3 border rounded-lg p-4 cursor-pointer transition-colors ${paymentMethod === 'card' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground'}`}>
                 <RadioGroupItem value="card" id="card" />
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-bold text-xs">
-                    PN
-                  </div>
+                  <div className="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-bold text-xs">PN</div>
                   <span className="font-medium">Pay Online (Card)</span>
                 </div>
               </label>
@@ -150,27 +141,16 @@ export function CheckoutScreen() {
           </RadioGroup>
         </div>
 
-        {/* Phone Input (for mobile payments only) */}
         {(paymentMethod === 'ecocash' || paymentMethod === 'onemoney') && (
           <div className="space-y-2">
             <Label htmlFor="phone">Phone Number</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                📱
-              </span>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="0771 234 567"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="pl-10"
-              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">📱</span>
+              <Input id="phone" type="tel" placeholder="0771 234 567" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="pl-10" />
             </div>
           </div>
         )}
 
-        {/* Instructions */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex gap-2">
             <span className="text-blue-600">ℹ️</span>
@@ -179,15 +159,15 @@ export function CheckoutScreen() {
         </div>
       </div>
 
-      {/* Fixed Bottom CTA */}
       <div className="fixed bottom-16 left-0 right-0 bg-card border-t shadow-lg max-w-[480px] mx-auto">
         <div className="p-4 space-y-2">
-          <Button onClick={handlePay} className="w-full h-12 text-lg font-semibold">
-            Pay ${total.toLocaleString()}
+          <Button onClick={handlePay} className="w-full h-12 text-lg font-semibold" disabled={initiatePayment.isPending}>
+            {initiatePayment.isPending ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
+            ) : `Pay $${total.toLocaleString()}`}
           </Button>
           <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
-            <Lock className="w-3 h-3" />
-            <span>Secured by Paynow</span>
+            <Lock className="w-3 h-3" /><span>Secured by Paynow</span>
           </div>
         </div>
       </div>
