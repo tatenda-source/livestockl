@@ -44,11 +44,6 @@ export function CheckoutScreen() {
 
   if (!item) return <div className="p-4">Item not found</div>;
 
-  if (!user) {
-    navigate('/auth');
-    return null;
-  }
-
   if (!hasWinningBid) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center gap-4">
@@ -75,6 +70,14 @@ export function CheckoutScreen() {
     if (!user) {
       navigate('/auth');
       return;
+    }
+
+    if (paymentMethod === 'ecocash' || paymentMethod === 'onemoney') {
+      const phoneRegex = /^07[0-9]{8}$/;
+      if (!phoneNumber || !phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
+        toast.error('Please enter a valid Zimbabwe phone number (07XXXXXXXX)');
+        return;
+      }
     }
 
     try {
@@ -173,7 +176,7 @@ export function CheckoutScreen() {
             <Label htmlFor="phone">Phone Number</Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">📱</span>
-              <Input id="phone" type="tel" placeholder="0771 234 567" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="pl-10" />
+              <Input id="phone" type="tel" placeholder="0771 234 567" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="pl-10" required />
             </div>
           </div>
         )}

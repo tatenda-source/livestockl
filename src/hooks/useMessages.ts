@@ -45,7 +45,7 @@ export function useConversations() {
   const user = useAuthStore((s) => s.user);
 
   return useQuery({
-    queryKey: ['conversations'],
+    queryKey: ['conversations', user?.id],
     enabled: !!user,
     queryFn: async () => {
       if (!isSupabaseConfigured) {
@@ -78,7 +78,8 @@ export function useConversations() {
           .from('messages')
           .select('conversation_id, content')
           .in('conversation_id', convIds)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(50);
 
         if (msgs) {
           for (const msg of msgs) {

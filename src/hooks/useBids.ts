@@ -60,13 +60,18 @@ export function usePlaceBid() {
       if (!user) throw new Error('Not authenticated');
 
       if (!isSupabaseConfigured) {
+        // Validate seller cannot bid on own listing in demo mode
+        const item = mockLivestock.find(i => i.id === livestockId);
+        if (item && (item as any).sellerId === user.id) {
+          throw new Error('Cannot bid on your own listing');
+        }
         return { id: 'mock-bid-' + Date.now(), amount };
       }
 
       // Use atomic database function for bid placement
-      const { data, error } = await supabase.rpc('place_bid', {
+      const { data, error } = await (supabase.rpc as any)('place_bid', {
         p_livestock_id: livestockId,
-        p_user_id: user!.id,
+        p_user_id: user.id,
         p_amount: amount,
       });
 

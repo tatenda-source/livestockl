@@ -15,18 +15,44 @@ Deno.serve(async (req) => {
     }
 
     // Verify hash from Paynow
+    // NOTE: The hash field order should be verified against Paynow's official documentation.
+    // We try multiple strategies: documented order first, then received order, then alphabetical.
     const receivedHash = params.hash;
-    const valuesToHash = Object.entries(params)
-      .filter(([key]) => key.toLowerCase() !== "hash")
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, value]) => value)
-      .join("");
 
-    const encoder = new TextEncoder();
-    const data = encoder.encode(valuesToHash + integrationKey);
-    const hashBuffer = await crypto.subtle.digest("SHA-512", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const computedHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    const computeHash = async (valueString: string): Promise<string> => {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(valueString + integrationKey);
+      const hashBuffer = await crypto.subtle.digest("SHA-512", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    };
+
+    // Strategy 1: Documented Paynow status update field order
+    const documentedOrder = ["reference", "paynowreference", "amount", "status", "pollurl"];
+    const documentedValues = documentedOrder
+      .filter((key) => key in params)
+      .map((key) => params[key])
+      .join("");
+    let computedHash = await computeHash(documentedValues);
+
+    // Strategy 2: Concatenate values in the order received (form-encoded order)
+    if (computedHash !== receivedHash?.toUpperCase()) {
+      const receivedOrderValues = Object.entries(params)
+        .filter(([key]) => key.toLowerCase() !== "hash")
+        .map(([, value]) => value)
+        .join("");
+      computedHash = await computeHash(receivedOrderValues);
+    }
+
+    // Strategy 3: Alphabetical sort (original fallback)
+    if (computedHash !== receivedHash?.toUpperCase()) {
+      const sortedValues = Object.entries(params)
+        .filter(([key]) => key.toLowerCase() !== "hash")
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, value]) => value)
+        .join("");
+      computedHash = await computeHash(sortedValues);
+    }
 
     if (computedHash !== receivedHash?.toUpperCase()) {
       console.error("Hash verification failed");

@@ -26,16 +26,17 @@ export function useNotifications() {
   });
 
   // Realtime subscription for new notifications
+  const userId = user?.id;
   useEffect(() => {
-    if (!user || !isSupabaseConfigured) return;
+    if (!userId || !isSupabaseConfigured) return;
 
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(`notifications:${userId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
         () => {
-          queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+          queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
         }
       )
       .subscribe();
@@ -43,7 +44,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, queryClient]);
+  }, [userId, queryClient]);
 
   return query;
 }
@@ -73,15 +74,18 @@ export function useUnreadCount() {
 
 export function useDeleteNotification() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!user) throw new Error('Not authenticated');
       if (!isSupabaseConfigured) return;
 
       const { error } = await supabase
         .from('notifications')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
     },
@@ -98,12 +102,13 @@ export function useMarkAllRead() {
 
   return useMutation({
     mutationFn: async () => {
+      if (!user) throw new Error('Not authenticated');
       if (!isSupabaseConfigured) return;
 
       const { error } = await supabase
         .from('notifications')
         .update({ read: true })
-        .eq('user_id', user!.id)
+        .eq('user_id', user.id)
         .eq('read', false);
 
       if (error) throw error;

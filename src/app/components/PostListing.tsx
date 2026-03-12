@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
@@ -29,6 +29,7 @@ export function PostListing() {
     return (existingItem.bid_count ?? existingItem.bidCount ?? 0) > 0;
   }, [existingItem]);
 
+  const blobUrlsRef = useRef<string[]>([]);
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [formData, setFormData] = useState({
@@ -78,7 +79,9 @@ export function PostListing() {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (file) {
           setPhotoFiles(prev => [...prev, file]);
-          setPhotos(prev => [...prev, URL.createObjectURL(file)]);
+          const blobUrl = URL.createObjectURL(file);
+          blobUrlsRef.current = [...blobUrlsRef.current, blobUrl];
+          setPhotos(prev => [...prev, blobUrl]);
         }
       };
       input.click();
@@ -91,21 +94,25 @@ export function PostListing() {
     const removedUrl = photos[index];
     if (removedUrl?.startsWith('blob:')) {
       URL.revokeObjectURL(removedUrl);
+      blobUrlsRef.current = blobUrlsRef.current.filter(u => u !== removedUrl);
     }
+    // Only remove from photoFiles if the removed photo is a new file (blob URL).
+    // photoFiles only tracks new files, so we must compute the correct index
+    // within photoFiles by counting how many blob URLs appear before this index.
     setPhotos(photos.filter((_, i) => i !== index));
-    setPhotoFiles(photoFiles.filter((_, i) => i !== index));
+    if (removedUrl?.startsWith('blob:')) {
+      const blobIndexesBefore = photos.slice(0, index).filter(url => url.startsWith('blob:')).length;
+      setPhotoFiles(photoFiles.filter((_, i) => i !== blobIndexesBefore));
+    }
   };
 
   // Revoke all object URLs on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
-      photos.forEach((url) => {
-        if (url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
+      blobUrlsRef.current.forEach((url) => {
+        URL.revokeObjectURL(url);
       });
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,6 +120,11 @@ export function PostListing() {
 
     if (!user) {
       navigate('/auth');
+      return;
+    }
+
+    if (photos.length === 0) {
+      toast.error('Please add at least one photo');
       return;
     }
 
@@ -307,15 +319,17 @@ export function PostListing() {
             <Label htmlFor="price">Starting Price ($)</Label>
             <Input id="price" type="number" placeholder="e.g., 800" value={formData.startingPrice} onChange={(e) => setFormData({ ...formData, startingPrice: e.target.value })} required disabled={isEditMode && hasBids} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="duration">Duration</Label>
-            <Select value={formData.duration} onValueChange={(v) => setFormData({ ...formData, duration: v })}>
-              <SelectTrigger><SelectValue placeholder="Select duration" /></SelectTrigger>
-              <SelectContent>
-                {durations.map(dur => (<SelectItem key={dur} value={dur}>{dur}</SelectItem>))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!isEditMode && (
+            <div className="space-y-2">
+              <Label htmlFor="duration">Duration</Label>
+              <Select value={formData.duration} onValueChange={(v) => setFormData({ ...formData, duration: v })}>
+                <SelectTrigger><SelectValue placeholder="Select duration" /></SelectTrigger>
+                <SelectContent>
+                  {durations.map(dur => (<SelectItem key={dur} value={dur}>{dur}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-1 text-sm">
             <p className="flex items-center gap-2"><span>ℹ️</span><span>5% platform fee</span></p>
             <p className="flex items-center gap-2"><span>ℹ️</span><span>48hr payment window</span></p>

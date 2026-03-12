@@ -68,6 +68,10 @@ create policy "Users can create own notifications"
   on public.notifications for insert
   with check (auth.uid() = user_id);
 
+create policy "Users can delete own notifications"
+  on public.notifications for delete
+  using (auth.uid() = user_id);
+
 -- STORAGE: livestock-images
 create policy "Anyone can view livestock images"
   on storage.objects for select

@@ -13,6 +13,7 @@ export function AuthScreen() {
   const { login, signup, loading } = useAuthStore();
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [signupSuccess, setSignupSuccess] = useState(false);
   const [signupData, setSignupData] = useState({
     firstName: '',
     lastName: '',
@@ -39,8 +40,8 @@ export function AuthScreen() {
         last_name: signupData.lastName,
         phone: signupData.phone,
       });
-      toast.success('Account created! Check your email to confirm.');
-      navigate('/');
+      setSignupSuccess(true);
+      toast.success('Account created! Check your email to confirm your account before signing in.');
     } catch (err: any) {
       toast.error(err.message || 'Signup failed');
     }
@@ -93,6 +94,12 @@ export function AuthScreen() {
             </TabsContent>
 
             <TabsContent value="signup">
+              {signupSuccess ? (
+                <div className="text-center py-6 space-y-3">
+                  <p className="text-lg font-semibold text-green-700">Account created!</p>
+                  <p className="text-sm text-muted-foreground">Check your email to confirm your account before signing in.</p>
+                </div>
+              ) : (
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -158,6 +165,7 @@ export function AuthScreen() {
                   {loading ? 'Creating account...' : 'Sign Up'}
                 </Button>
               </form>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

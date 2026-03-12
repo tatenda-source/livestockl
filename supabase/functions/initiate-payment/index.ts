@@ -57,6 +57,20 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Verify the authenticated user owns this payment
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
+    );
+    const { data: { user: callerUser }, error: authError } = await authClient.auth.getUser();
+    if (authError || !callerUser || callerUser.id !== paymentRecord.user_id) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden: you do not own this payment" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const integrationId = Deno.env.get("PAYNOW_INTEGRATION_ID");
     const integrationKey = Deno.env.get("PAYNOW_INTEGRATION_KEY");
     const resultUrl = Deno.env.get("PAYNOW_RESULT_URL");

@@ -74,25 +74,29 @@ export function useToggleFavorite() {
       }
 
       // Check if favorite exists
-      const { data: existing, error: selectError } = await supabase
+      const { data: existing } = await supabase
         .from('favorites')
         .select('id')
         .eq('user_id', user.id)
         .eq('livestock_id', livestockId)
         .maybeSingle();
 
-      if (selectError) throw selectError;
-
       if (existing) {
+        // Delete directly by both conditions (idempotent)
         const { error } = await supabase
           .from('favorites')
           .delete()
-          .eq('id', existing.id);
+          .eq('user_id', user.id)
+          .eq('livestock_id', livestockId);
         if (error) throw error;
       } else {
+        // Upsert to handle race condition (ignore duplicate)
         const { error } = await supabase
           .from('favorites')
-          .insert({ user_id: user.id, livestock_id: livestockId });
+          .upsert(
+            { user_id: user.id, livestock_id: livestockId },
+            { onConflict: 'user_id,livestock_id', ignoreDuplicates: true }
+          );
         if (error) throw error;
       }
     },

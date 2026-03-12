@@ -61,7 +61,7 @@ export function useLivestockItem(id: string | undefined) {
   useEffect(() => {
     if (id && isSupabaseConfigured && viewCountedRef.current !== id) {
       viewCountedRef.current = id;
-      supabase.rpc('increment_view_count', { p_item_id: id }).then();
+      (supabase.rpc as any)('increment_view_count', { p_item_id: id }).then();
     }
   }, [id]);
 
@@ -187,29 +187,26 @@ export function useUpdateListing() {
         return { id, ...updates };
       }
 
-      // If starting_price is being updated, verify bid_count is 0
-      if (updates.starting_price !== undefined) {
-        const { data: existing, error: fetchError } = await supabase
-          .from('livestock_items')
-          .select('bid_count')
-          .eq('id', id)
-          .single();
-
-        if (fetchError) throw fetchError;
-        if (existing.bid_count > 0) {
-          throw new Error('Cannot change starting price after bids have been placed');
-        }
-      }
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('livestock_items')
         .update(updates)
         .eq('id', id)
-        .eq('seller_id', user.id)
-        .select()
-        .single();
+        .eq('seller_id', user.id);
 
-      if (error) throw error;
+      // If starting_price is being updated, atomically verify bid_count is 0
+      if (updates.starting_price !== undefined) {
+        query = query.eq('bid_count', 0);
+      }
+
+      const { data, error } = await query.select().single();
+
+      if (error) {
+        if (updates.starting_price !== undefined && error.code === 'PGRST116') {
+          throw new Error('Cannot change starting price after bids have been placed');
+        }
+        throw error;
+      }
+
       return data;
     },
     onSuccess: () => {

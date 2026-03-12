@@ -4,6 +4,7 @@ import { ArrowLeft, Heart, Share2, MapPin, Star, MessageCircle, Trophy, Loader2 
 import { useLivestockItem } from "../../hooks/useLivestock";
 import { useBids, usePlaceBid } from "../../hooks/useBids";
 import { useStartConversation } from "../../hooks/useMessages";
+import { useIsFavorite, useToggleFavorite } from "../../hooks/useFavorites";
 import { useAuthStore } from "../../stores/authStore";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -22,6 +23,8 @@ export function ItemDetail() {
   const { data: bids } = useBids(id);
   const placeBid = usePlaceBid();
   const startConversation = useStartConversation();
+  const isFavorite = useIsFavorite(id || '');
+  const toggleFavorite = useToggleFavorite();
 
   if (isLoading) {
     return (
@@ -124,8 +127,29 @@ export function ItemDetail() {
           <span>Back</span>
         </button>
         <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-muted rounded-full"><Heart className="w-5 h-5" /></button>
-          <button className="p-2 hover:bg-muted rounded-full"><Share2 className="w-5 h-5" /></button>
+          <button
+            className="p-2 hover:bg-muted rounded-full"
+            onClick={() => {
+              if (!user) { navigate('/auth'); return; }
+              toggleFavorite.mutate(id!);
+            }}
+          >
+            <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
+          </button>
+          <button
+            className="p-2 hover:bg-muted rounded-full"
+            onClick={async () => {
+              const shareData = { title: item?.title || 'Listing', url: window.location.href };
+              if (navigator.share) {
+                try { await navigator.share(shareData); } catch {}
+              } else {
+                await navigator.clipboard.writeText(window.location.href);
+                toast.success('Link copied to clipboard');
+              }
+            }}
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
@@ -220,7 +244,7 @@ export function ItemDetail() {
       </div>
 
       <div className="fixed bottom-16 left-0 right-0 bg-card border-t shadow-lg max-w-[480px] mx-auto">
-        {status === 'active' ? (
+        {status === 'active' && getTimeLeft() !== 'Ended' ? (
           <div className="p-4 space-y-2">
             <p className="text-sm text-muted-foreground">Minimum bid: ${minBid.toLocaleString()}</p>
             <div className="flex gap-2">

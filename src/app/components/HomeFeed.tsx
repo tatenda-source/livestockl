@@ -4,9 +4,12 @@ import { Heart, MapPin, Eye, MessageCircle, Gavel, CheckCircle, Loader2 } from "
 import { categories } from "../data/mockData";
 import { useLivestockList } from "../../hooks/useLivestock";
 import { useFavorites, useToggleFavorite } from "../../hooks/useFavorites";
+import { useStartConversation } from "../../hooks/useMessages";
+import { useAuthStore } from "../../stores/authStore";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
+import { toast } from "sonner";
 
 export function HomeFeed() {
   const navigate = useNavigate();
@@ -15,6 +18,26 @@ export function HomeFeed() {
   const { data: livestock, isLoading, error } = useLivestockList(selectedCategory);
   const { data: favoriteIds = [] } = useFavorites();
   const { mutate: toggleFavorite } = useToggleFavorite();
+  const startConversation = useStartConversation();
+  const user = useAuthStore((s) => s.user);
+
+  const handleMessage = async (item: any) => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+    const sellerId = item.seller_id || item.sellerId;
+    if (!sellerId) {
+      toast.error('Seller information unavailable');
+      return;
+    }
+    try {
+      const conv = await startConversation.mutateAsync({ sellerId, livestockId: item.id });
+      navigate(`/messages/${conv.id}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start conversation');
+    }
+  };
 
   const getSellerInfo = (item: any) => {
     // Handle both mock data format and Supabase joined format
@@ -158,7 +181,7 @@ export function HomeFeed() {
                   </div>
 
                   <div className="flex gap-2 pt-2">
-                    <Button variant="outline" className="flex-1" onClick={(e) => e.stopPropagation()}>
+                    <Button variant="outline" className="flex-1" onClick={(e) => { e.stopPropagation(); handleMessage(item); }} disabled={startConversation.isPending}>
                       <MessageCircle className="w-4 h-4 mr-2" />
                       Message
                     </Button>

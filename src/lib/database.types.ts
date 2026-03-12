@@ -146,9 +146,75 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['notifications']['Insert']>;
       };
+      favorites: {
+        Row: {
+          id: string;
+          user_id: string;
+          livestock_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          livestock_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['favorites']['Insert']>;
+      };
+      conversations: {
+        Row: {
+          id: string;
+          participant_1: string;
+          participant_2: string;
+          livestock_id: string | null;
+          last_message_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          participant_1: string;
+          participant_2: string;
+          livestock_id?: string | null;
+          last_message_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['conversations']['Insert']>;
+      };
+      messages: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          sender_id: string;
+          content: string;
+          read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          sender_id: string;
+          content: string;
+          read?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['messages']['Insert']>;
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      place_bid: {
+        Args: { p_livestock_id: string; p_user_id: string; p_amount: number };
+        Returns: string;
+      };
+      increment_view_count: {
+        Args: { p_item_id: string };
+        Returns: undefined;
+      };
+      end_expired_auctions: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+    };
     Enums: Record<string, never>;
   };
 }

@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { useMyListings, useWonItems, useDeleteListing } from "../../hooks/useLivestock";
+import { useStartConversation } from "../../hooks/useMessages";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -14,6 +15,21 @@ export function MyListings() {
   const { data: sellingItems, isLoading: loadingSelling } = useMyListings();
   const { data: wonItems, isLoading: loadingWon } = useWonItems();
   const deleteListing = useDeleteListing();
+  const startConversation = useStartConversation();
+
+  const handleChat = async (item: any) => {
+    const sellerId = item.seller_id || item.sellerId;
+    if (!sellerId) {
+      toast.error('Seller information unavailable');
+      return;
+    }
+    try {
+      const conv = await startConversation.mutateAsync({ sellerId, livestockId: item.id });
+      navigate(`/messages/${conv.id}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start conversation');
+    }
+  };
 
   const getImageUrl = (item: any) => item.imageUrl ?? item.image_urls?.[0] ?? '';
   const getCurrentBid = (item: any) => item.currentBid ?? item.current_bid ?? 0;
@@ -104,7 +120,7 @@ export function MyListings() {
                 </div>
                 <div className="flex gap-2 mt-3">
                   <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => navigate(`/checkout/${item.id}`)}>Pay Now</Button>
-                  <Button variant="outline" className="flex-1"><MessageCircle className="w-4 h-4 mr-1" />Chat</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => handleChat(item)} disabled={startConversation.isPending}><MessageCircle className="w-4 h-4 mr-1" />Chat</Button>
                 </div>
               </div>
             ))
