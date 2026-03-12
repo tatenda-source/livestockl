@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockLivestock } from '../app/data/mockData';
 import { useAuthStore } from '../stores/authStore';
@@ -20,7 +20,8 @@ export function useBids(livestockId: string | undefined) {
         .from('bids')
         .select('*, profiles!user_id(first_name, last_name)')
         .eq('livestock_id', livestockId!)
-        .order('amount', { ascending: false });
+        .order('amount', { ascending: false })
+        .limit(100);
 
       if (error) throw error;
       return data;
@@ -28,6 +29,8 @@ export function useBids(livestockId: string | undefined) {
   });
 
   // Realtime subscription for bid updates
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   useEffect(() => {
     if (!livestockId || !isSupabaseConfigured) return;
 
@@ -37,13 +40,17 @@ export function useBids(livestockId: string | undefined) {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bids', filter: `livestock_id=eq.${livestockId}` },
         () => {
-          queryClient.invalidateQueries({ queryKey: ['bids', livestockId] });
-          queryClient.invalidateQueries({ queryKey: ['livestock', livestockId] });
+          clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['bids', livestockId] });
+            queryClient.invalidateQueries({ queryKey: ['livestock', livestockId] });
+          }, 1000);
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
   }, [livestockId, queryClient]);

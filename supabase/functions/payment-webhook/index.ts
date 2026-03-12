@@ -77,37 +77,31 @@ Deno.serve(async (req) => {
     // Update payment by reference
     const reference = params.reference;
 
-    // Idempotency: skip if payment already in terminal state
-    const { data: existingPayment } = await supabase
-      .from("payments")
-      .select("status")
-      .eq("reference", reference)
-      .single();
-
-    if (existingPayment?.status === "paid" || existingPayment?.status === "failed") {
-      return new Response("Already processed", { status: 200 });
-    }
-    const { error } = await supabase
+    // Atomic: only update if still pending (prevents TOCTOU race)
+    const { data: updated, error } = await supabase
       .from("payments")
       .update({
         status: dbStatus,
         paynow_reference: params.paynowreference || null,
         updated_at: new Date().toISOString(),
       })
-      .eq("reference", reference);
+      .eq("reference", reference)
+      .eq("status", "pending")
+      .select("livestock_id, user_id, amount")
+      .maybeSingle();
 
     if (error) {
       console.error("Failed to update payment:", error);
       return new Response("DB error", { status: 500 });
     }
 
+    if (!updated) {
+      return new Response("Already processed", { status: 200 });
+    }
+
     // If payment succeeded, mark the livestock item as sold and create notification
     if (dbStatus === "paid") {
-      const { data: payment } = await supabase
-        .from("payments")
-        .select("livestock_id, user_id, amount")
-        .eq("reference", reference)
-        .single();
+      const payment = updated;
 
       if (payment) {
         // Mark item as sold

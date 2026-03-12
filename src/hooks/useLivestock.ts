@@ -4,6 +4,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockLivestock } from '../app/data/mockData';
 import { useAuthStore } from '../stores/authStore';
 
+const PAGE_SIZE = 20;
+
 export function useLivestockList(category?: string) {
   return useQuery({
     queryKey: ['livestock', category],
@@ -19,7 +21,8 @@ export function useLivestockList(category?: string) {
         .from('livestock_items')
         .select('*, profiles!seller_id(first_name, last_name, avatar_url, verified, rating, sales_count)')
         .eq('status', 'active')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
 
       if (category && category !== 'All') {
         query = query.eq('category', category);
@@ -60,8 +63,14 @@ export function useLivestockItem(id: string | undefined) {
   // Increment view count once per item ID, outside of queryFn
   useEffect(() => {
     if (id && isSupabaseConfigured && viewCountedRef.current !== id) {
-      viewCountedRef.current = id;
-      (supabase.rpc as any)('increment_view_count', { p_item_id: id }).then();
+      const key = `viewed_${id}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        viewCountedRef.current = id;
+        (supabase.rpc as any)('increment_view_count', { p_item_id: id }).then();
+      } else {
+        viewCountedRef.current = id;
+      }
     }
   }, [id]);
 
@@ -131,7 +140,8 @@ export function useMyListings() {
         .from('livestock_items')
         .select('*')
         .eq('seller_id', user!.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (error) throw error;
       return data;
@@ -156,7 +166,8 @@ export function useWonItems() {
         .from('bids')
         .select('livestock_id, amount, livestock_items(*)')
         .eq('user_id', user!.id)
-        .eq('is_winner', true);
+        .eq('is_winner', true)
+        .limit(50);
 
       if (error) throw error;
       return winningBids?.map(b => b.livestock_items).filter(Boolean) || [];
@@ -228,29 +239,21 @@ export function useDeleteListing() {
         return { id };
       }
 
-      // Verify the listing is deletable (active status and no bids)
-      const { data: existing, error: fetchError } = await supabase
-        .from('livestock_items')
-        .select('status, bid_count')
-        .eq('id', id)
-        .eq('seller_id', user.id)
-        .single();
-
-      if (fetchError) throw fetchError;
-      if (existing.status !== 'active') {
-        throw new Error('Can only delete active listings');
-      }
-      if (existing.bid_count > 0) {
-        throw new Error('Cannot delete a listing that has bids');
-      }
-
-      const { error } = await supabase
+      // Single atomic delete -- checks bid_count and status in the same query
+      const { data, error } = await supabase
         .from('livestock_items')
         .delete()
         .eq('id', id)
-        .eq('seller_id', user.id);
+        .eq('seller_id', user.id)
+        .eq('status', 'active')
+        .eq('bid_count', 0)
+        .select('id')
+        .maybeSingle();
 
       if (error) throw error;
+      if (!data) {
+        throw new Error('Cannot delete: listing has bids or is no longer active');
+      }
       return { id };
     },
     onSuccess: () => {

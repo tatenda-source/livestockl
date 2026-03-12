@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "*",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "https://zimlivestock.co.zw",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     );
     const { data: paymentRecord } = await verifyClient
       .from("payments")
-      .select("amount, user_id")
+      .select("amount, user_id, livestock_id")
       .eq("reference", reference)
       .single();
 
@@ -68,6 +68,45 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Forbidden: you do not own this payment" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify auction win and calculate correct amount
+    const { data: winningBid } = await verifyClient
+      .from("bids")
+      .select("amount, livestock_id")
+      .eq("user_id", callerUser.id)
+      .eq("is_winner", true)
+      .eq("livestock_id", paymentRecord.livestock_id)
+      .single();
+
+    if (!winningBid) {
+      return new Response(
+        JSON.stringify({ error: "You did not win this auction" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify listing status is 'ended' (not sold, cancelled, or active)
+    const { data: listing } = await verifyClient
+      .from("livestock_items")
+      .select("status")
+      .eq("id", winningBid.livestock_id)
+      .single();
+
+    if (!listing || listing.status !== "ended") {
+      return new Response(
+        JSON.stringify({ error: "Auction is not in a payable state" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Server-calculated amount (bid + 5% platform fee)
+    const correctAmount = Math.round(winningBid.amount * 1.05);
+    if (paymentRecord.amount !== correctAmount) {
+      return new Response(
+        JSON.stringify({ error: "Payment amount mismatch" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -109,14 +148,22 @@ Deno.serve(async (req) => {
       values.authemail = ""; // Required field for mobile
 
       const formBody = new URLSearchParams(values).toString();
-      const paynowResponse = await fetch(
-        "https://www.paynow.co.zw/interface/remotetransaction",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: formBody,
-        }
-      );
+      const mobileController = new AbortController();
+      const mobileTimeout = setTimeout(() => mobileController.abort(), 15000);
+      let paynowResponse: Response;
+      try {
+        paynowResponse = await fetch(
+          "https://www.paynow.co.zw/interface/remotetransaction",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: formBody,
+            signal: mobileController.signal,
+          }
+        );
+      } finally {
+        clearTimeout(mobileTimeout);
+      }
 
       const responseText = await paynowResponse.text();
       const parsed = Object.fromEntries(new URLSearchParams(responseText));
@@ -155,14 +202,22 @@ Deno.serve(async (req) => {
 
     // Web payment — redirect to Paynow checkout
     const formBody = new URLSearchParams(values).toString();
-    const paynowResponse = await fetch(
-      "https://www.paynow.co.zw/interface/initiatetransaction",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formBody,
-      }
-    );
+    const webController = new AbortController();
+    const webTimeout = setTimeout(() => webController.abort(), 15000);
+    let paynowResponse: Response;
+    try {
+      paynowResponse = await fetch(
+        "https://www.paynow.co.zw/interface/initiatetransaction",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formBody,
+          signal: webController.signal,
+        }
+      );
+    } finally {
+      clearTimeout(webTimeout);
+    }
 
     const responseText = await paynowResponse.text();
     const parsed = Object.fromEntries(new URLSearchParams(responseText));

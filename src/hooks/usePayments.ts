@@ -16,7 +16,8 @@ export function usePaymentHistory() {
         .from('payments')
         .select('*, livestock_items(title)')
         .eq('user_id', user!.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (error) throw error;
       return data;
@@ -70,10 +71,24 @@ export function useInitiatePayment() {
     }) => {
       if (!user) throw new Error('Not authenticated');
 
-      const reference = `ZL-${Date.now().toString(36).toUpperCase()}`;
+      const reference = `ZL-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`.toUpperCase();
 
       if (!isSupabaseConfigured) {
         return { reference, status: 'pending' as const };
+      }
+
+      // Check for existing pending/paid payments to prevent duplicates
+      const { data: existing } = await supabase
+        .from('payments')
+        .select('reference, status')
+        .eq('livestock_id', livestockId)
+        .eq('user_id', user!.id)
+        .in('status', ['pending', 'paid'])
+        .maybeSingle();
+
+      if (existing) {
+        if (existing.status === 'paid') throw new Error('Already paid for this item');
+        return { ...existing, status: 'pending' as const };
       }
 
       // Create payment record

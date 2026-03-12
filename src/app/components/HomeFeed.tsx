@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Heart, MapPin, Eye, MessageCircle, Gavel, CheckCircle, Loader2 } from "lucide-react";
+import { Heart, MapPin, Eye, MessageCircle, Gavel, CheckCircle, Loader2, Search } from "lucide-react";
 import { categories } from "../data/mockData";
 import { useLivestockList } from "../../hooks/useLivestock";
 import { useFavorites, useToggleFavorite } from "../../hooks/useFavorites";
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 export function HomeFeed() {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: livestock, isLoading, error } = useLivestockList(selectedCategory);
   const { data: favoriteIds = [] } = useFavorites();
@@ -81,6 +82,19 @@ export function HomeFeed() {
           <p className="text-sm text-muted-foreground">Find your next animal</p>
         </div>
 
+        <div className="px-4 pb-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by title, breed, location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-lg border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
         <div className="px-4 pb-3 overflow-x-auto">
           <div className="flex gap-2 min-w-max">
             <Badge
@@ -113,17 +127,29 @@ export function HomeFeed() {
           <div className="text-center py-12 text-muted-foreground">
             <p>Failed to load listings</p>
           </div>
-        ) : !livestock?.length ? (
+        ) : (() => {
+          const filteredLivestock = (livestock || []).filter((item: any) => {
+            if (!searchQuery.trim()) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+              item.title?.toLowerCase().includes(q) ||
+              item.breed?.toLowerCase().includes(q) ||
+              item.location?.toLowerCase().includes(q) ||
+              item.description?.toLowerCase().includes(q) ||
+              item.category?.toLowerCase().includes(q)
+            );
+          });
+          return !filteredLivestock.length ? (
           <div className="text-center py-12 text-muted-foreground">
             <p>No listings found</p>
           </div>
         ) : (
-          livestock.map((item: any) => {
+          filteredLivestock.map((item: any) => {
             const seller = getSellerInfo(item);
             return (
               <div key={item.id} className="bg-card rounded-lg shadow-md overflow-hidden border">
                 <div className="relative aspect-[4/3] bg-muted cursor-pointer" onClick={() => navigate(`/item/${item.id}`)}>
-                  <img src={getImageUrl(item)} alt={item.title} className="w-full h-full object-cover" />
+                  <img src={getImageUrl(item)} alt={item.title} className="w-full h-full object-cover" loading="lazy" />
                   <div className="absolute bottom-2 left-2">
                     <Badge className="bg-black/70 text-white border-0">{item.breed}</Badge>
                   </div>
@@ -142,7 +168,7 @@ export function HomeFeed() {
                   <div>
                     <h3 className="font-semibold text-lg">{item.title}</h3>
                     <p className="text-xl font-bold text-primary">
-                      Current Bid: ${getCurrentBid(item).toLocaleString()}
+                      Current Bid: US${getCurrentBid(item).toLocaleString()}
                     </p>
                   </div>
 
@@ -193,7 +219,8 @@ export function HomeFeed() {
               </div>
             );
           })
-        )}
+        );
+        })()}
       </div>
     </div>
   );

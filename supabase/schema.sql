@@ -146,7 +146,7 @@ begin
     raise exception 'Auction is not active';
   end if;
 
-  if v_item.end_time < now() then
+  if v_item.end_time <= now() then
     -- Auto-end expired auction
     update public.livestock_items set status = 'ended' where id = p_livestock_id;
     raise exception 'Auction has ended';
@@ -196,10 +196,17 @@ declare
   v_item record;
   v_winning_bid record;
 begin
+  -- Prevent concurrent execution
+  if not pg_try_advisory_lock(42) then
+    return;
+  end if;
+
   for v_item in
     select id, seller_id, title
     from public.livestock_items
-    where status = 'active' and end_time < now()
+    where status = 'active' and end_time <= now()
+    for update skip locked
+    limit 50
   loop
     -- Mark auction as ended
     update public.livestock_items set status = 'ended' where id = v_item.id;
@@ -227,10 +234,32 @@ begin
       values (v_item.seller_id, 'auction_ending', 'Auction ended',
               'Your listing ' || v_item.title || ' sold for $' || v_winning_bid.amount,
               'high');
+    else
+      -- Notify seller that auction ended with no bids
+      insert into public.notifications (user_id, type, title, message, priority)
+      values (v_item.seller_id, 'auction_ending', 'Auction ended',
+              'Your listing ' || v_item.title || ' ended with no bids.',
+              'medium');
     end if;
   end loop;
+
+  perform pg_advisory_unlock(42);
 end;
 $$ language plpgsql security definer;
+
+-- Compute end_time server-side to prevent client manipulation
+create or replace function public.set_listing_end_time()
+returns trigger as $$
+begin
+  new.end_time := now() + (new.duration_days || ' days')::interval;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists set_listing_end_time_trigger on public.livestock_items;
+create trigger set_listing_end_time_trigger
+  before insert on public.livestock_items
+  for each row execute function public.set_listing_end_time();
 
 -- Composite indexes for common queries
 create index if not exists idx_livestock_status_category on public.livestock_items(status, category);
@@ -296,3 +325,17 @@ alter publication supabase_realtime add table public.messages;
 -- To enable automatic auction expiry, enable pg_cron extension in Supabase dashboard
 -- then run:
 -- select cron.schedule('end-expired-auctions', '* * * * *', $$ select end_expired_auctions(); $$);
+
+-- Prevent duplicate active payments for same item
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_unique_active
+  ON public.payments(livestock_id, user_id)
+  WHERE status IN ('pending', 'paid');
+
+-- Index for payment lookups by livestock_id
+CREATE INDEX IF NOT EXISTS idx_payments_livestock
+  ON public.payments(livestock_id);
+
+-- Prevent self-conversations
+ALTER TABLE public.conversations
+  ADD CONSTRAINT no_self_conversation
+  CHECK (participant_1 != participant_2);

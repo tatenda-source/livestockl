@@ -12,11 +12,14 @@ import { Input } from "./ui/input";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Separator } from "./ui/separator";
 import { toast } from "sonner";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 
 export function ItemDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [bidAmount, setBidAmount] = useState('');
+  const [showBidConfirm, setShowBidConfirm] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const user = useAuthStore((s) => s.user);
 
   const { data: item, isLoading } = useLivestockItem(id);
@@ -42,6 +45,7 @@ export function ItemDetail() {
   const currentBid = item.currentBid ?? (item as any).current_bid ?? 0;
   const startingPrice = item.startingPrice ?? (item as any).starting_price ?? 0;
   const imageUrl = item.imageUrl ?? (item as any).image_urls?.[0] ?? '';
+  const imageUrls: string[] = (item as any).image_urls ?? (item.imageUrl ? [item.imageUrl] : []);
   const status = item.status ?? 'active';
   const minBid = currentBid + 50;
 
@@ -62,6 +66,7 @@ export function ItemDetail() {
 
   const seller = getSellerInfo();
   const sellerId: string = (item as any).seller_id || (item as any).sellerId || '';
+  const isOwnListing = user?.id === sellerId;
 
   const handleChat = async () => {
     if (!user) {
@@ -112,7 +117,7 @@ export function ItemDetail() {
 
     try {
       await placeBid.mutateAsync({ livestockId: id!, amount });
-      toast.success(`Bid placed: $${amount}`);
+      toast.success(`Bid placed: US$${amount}`);
       setBidAmount('');
     } catch (err: any) {
       toast.error(err.message || 'Failed to place bid');
@@ -155,7 +160,34 @@ export function ItemDetail() {
 
       <div className="pb-32">
         <div className="relative aspect-[4/3] bg-muted">
-          <img src={imageUrl} alt={item.title} className="w-full h-full object-cover" />
+          <img src={imageUrls[currentImageIndex] || imageUrl} alt={item.title} className="w-full h-full object-cover" />
+          {imageUrls.length > 1 && (
+            <>
+              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {imageUrls.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentImageIndex(i)}
+                    className={`w-2 h-2 rounded-full transition-colors ${i === currentImageIndex ? 'bg-white' : 'bg-white/50'}`}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={() => setCurrentImageIndex(i => Math.max(0, i - 1))}
+                className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center"
+                style={{ display: currentImageIndex === 0 ? 'none' : 'flex' }}
+              >
+                ‹
+              </button>
+              <button
+                onClick={() => setCurrentImageIndex(i => Math.min(imageUrls.length - 1, i + 1))}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 text-white rounded-full flex items-center justify-center"
+                style={{ display: currentImageIndex === imageUrls.length - 1 ? 'none' : 'flex' }}
+              >
+                ›
+              </button>
+            </>
+          )}
           <div className="absolute bottom-3 left-3">
             <Badge className="bg-black/70 text-white border-0">{item.breed}</Badge>
           </div>
@@ -167,8 +199,8 @@ export function ItemDetail() {
         <div className="p-4 space-y-4">
           <div>
             <h1 className="text-2xl font-bold">{item.title}</h1>
-            <p className="text-2xl font-bold text-primary mt-1">Current Bid: ${currentBid.toLocaleString()}</p>
-            <p className="text-sm text-muted-foreground mt-1">Starting: ${startingPrice.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-primary mt-1">Current Bid: US${currentBid.toLocaleString()}</p>
+            <p className="text-sm text-muted-foreground mt-1">Starting: US${startingPrice.toLocaleString()}</p>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
@@ -233,7 +265,7 @@ export function ItemDetail() {
                     <span className="font-medium">{bid.userName}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold">${bid.amount.toLocaleString()}</span>
+                    <span className="font-semibold">US${bid.amount.toLocaleString()}</span>
                     {bid.isWinner && <Trophy className="w-4 h-4 text-primary" />}
                   </div>
                 </div>
@@ -244,12 +276,12 @@ export function ItemDetail() {
       </div>
 
       <div className="fixed bottom-16 left-0 right-0 bg-card border-t shadow-lg max-w-[480px] mx-auto">
-        {status === 'active' && getTimeLeft() !== 'Ended' ? (
+        {status === 'active' && getTimeLeft() !== 'Ended' && !isOwnListing ? (
           <div className="p-4 space-y-2">
-            <p className="text-sm text-muted-foreground">Minimum bid: ${minBid.toLocaleString()}</p>
+            <p className="text-sm text-muted-foreground">Minimum bid: US${minBid.toLocaleString()}</p>
             <div className="flex gap-2">
               <div className="flex-1 relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">US$</span>
                 <Input
                   type="number"
                   placeholder={minBid.toString()}
@@ -258,19 +290,40 @@ export function ItemDetail() {
                   className="pl-7"
                 />
               </div>
-              <Button
-                onClick={handlePlaceBid}
-                disabled={!bidAmount || Number(bidAmount) < minBid || placeBid.isPending}
-                className="px-8"
-              >
-                {placeBid.isPending ? 'Bidding...' : 'Bid Now'}
-              </Button>
+              <AlertDialog open={showBidConfirm} onOpenChange={setShowBidConfirm}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    onClick={() => {
+                      if (!user) { navigate('/auth'); return; }
+                      setShowBidConfirm(true);
+                    }}
+                    disabled={!bidAmount || Number(bidAmount) < minBid || placeBid.isPending}
+                    className="px-8"
+                  >
+                    {placeBid.isPending ? 'Bidding...' : 'Bid Now'}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm Bid</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Place bid of US${Number(bidAmount).toLocaleString()} on {item.title}? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => { setShowBidConfirm(false); handlePlaceBid(); }}>
+                      Confirm
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         ) : isWinner ? (
           <div className="p-4">
             <Button onClick={() => navigate(`/checkout/${item.id}`)} className="w-full bg-green-600 hover:bg-green-700">
-              Pay ${currentBid.toLocaleString()} — Paynow
+              Pay US${currentBid.toLocaleString()} — Paynow
             </Button>
           </div>
         ) : null}

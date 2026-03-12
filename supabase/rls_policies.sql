@@ -13,7 +13,13 @@ create policy "Profiles are viewable by everyone"
   on public.profiles for select using (true);
 
 create policy "Users can update own profile"
-  on public.profiles for update using (auth.uid() = id);
+  on public.profiles for update
+  using (auth.uid() = id)
+  with check (
+    verified IS NOT DISTINCT FROM (select verified from public.profiles where id = auth.uid())
+    and rating IS NOT DISTINCT FROM (select rating from public.profiles where id = auth.uid())
+    and sales_count IS NOT DISTINCT FROM (select sales_count from public.profiles where id = auth.uid())
+  );
 
 -- LIVESTOCK ITEMS
 create policy "Listings are viewable by everyone"
@@ -25,7 +31,15 @@ create policy "Authenticated users can create listings"
 
 create policy "Sellers can update own listings"
   on public.livestock_items for update
-  using (auth.uid() = seller_id);
+  using (auth.uid() = seller_id)
+  with check (
+    current_bid IS NOT DISTINCT FROM (select current_bid from public.livestock_items where id = livestock_items.id)
+    and bid_count IS NOT DISTINCT FROM (select bid_count from public.livestock_items where id = livestock_items.id)
+    and view_count IS NOT DISTINCT FROM (select view_count from public.livestock_items where id = livestock_items.id)
+    and status IS NOT DISTINCT FROM (select status from public.livestock_items where id = livestock_items.id)
+    and end_time IS NOT DISTINCT FROM (select end_time from public.livestock_items where id = livestock_items.id)
+    and seller_id IS NOT DISTINCT FROM (select seller_id from public.livestock_items where id = livestock_items.id)
+  );
 
 create policy "Sellers can delete own listings"
   on public.livestock_items for delete
@@ -48,11 +62,7 @@ create policy "Authenticated users can create payments"
   on public.payments for insert
   with check (auth.uid() = user_id);
 
--- Only payment owner can view status; service role bypasses RLS for webhook updates
-create policy "Users can update own payment status"
-  on public.payments for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+-- No user-facing update policy -- only service role updates payments
 
 -- NOTIFICATIONS
 create policy "Users can view own notifications"
@@ -109,7 +119,7 @@ create policy "Users can view own conversations"
 
 create policy "Users can create conversations they are part of"
   on public.conversations for insert
-  with check (auth.uid() = participant_1 or auth.uid() = participant_2);
+  with check (auth.uid() = participant_1);
 
 create policy "Users can update own conversations"
   on public.conversations for update
@@ -139,12 +149,16 @@ create policy "Users can insert messages in own conversations"
     )
   );
 
-create policy "Users can update own messages"
+create policy "Users can update messages"
   on public.messages for update
   using (
     exists (
       select 1 from public.conversations c
       where c.id = conversation_id
       and (c.participant_1 = auth.uid() or c.participant_2 = auth.uid())
+    )
+    and (
+      auth.uid() = sender_id
+      or (auth.uid() != sender_id and read = true)
     )
   );

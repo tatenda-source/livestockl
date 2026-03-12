@@ -1,55 +1,70 @@
 import { createBrowserRouter, Link } from "react-router";
+import { lazy, Suspense } from "react";
 import { Root } from "./components/Root";
-import { AuthScreen } from "./components/AuthScreen";
-import { HomeFeed } from "./components/HomeFeed";
-import { ItemDetail } from "./components/ItemDetail";
-import { CheckoutScreen } from "./components/CheckoutScreen";
-import { PaymentStatus } from "./components/PaymentStatus";
-import { PostListing } from "./components/PostListing";
-import { MyListings } from "./components/MyListings";
-import { PaymentHistory } from "./components/PaymentHistory";
-import { Notifications } from "./components/Notifications";
-import { MessagesScreen } from "./components/MessagesScreen";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { Loader2 } from "lucide-react";
+
+const HomeFeed = lazy(() => import('./components/HomeFeed').then(m => ({ default: m.HomeFeed })));
+const AuthScreen = lazy(() => import('./components/AuthScreen').then(m => ({ default: m.AuthScreen })));
+const ItemDetail = lazy(() => import('./components/ItemDetail').then(m => ({ default: m.ItemDetail })));
+const CheckoutScreen = lazy(() => import('./components/CheckoutScreen').then(m => ({ default: m.CheckoutScreen })));
+const PaymentStatus = lazy(() => import('./components/PaymentStatus').then(m => ({ default: m.PaymentStatus })));
+const PostListing = lazy(() => import('./components/PostListing').then(m => ({ default: m.PostListing })));
+const MyListings = lazy(() => import('./components/MyListings').then(m => ({ default: m.MyListings })));
+const PaymentHistory = lazy(() => import('./components/PaymentHistory').then(m => ({ default: m.PaymentHistory })));
+const Notifications = lazy(() => import('./components/Notifications').then(m => ({ default: m.Notifications })));
+const MessagesScreen = lazy(() => import('./components/MessagesScreen').then(m => ({ default: m.MessagesScreen })));
+
+function LazyLoad({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    }>
+      {children}
+    </Suspense>
+  );
+}
 
 export const router = createBrowserRouter([
   {
     path: "/",
     Component: Root,
     children: [
-      { index: true, Component: HomeFeed },
-      { path: "item/:id", Component: ItemDetail },
+      { index: true, element: <LazyLoad><HomeFeed /></LazyLoad> },
+      { path: "item/:id", element: <LazyLoad><ItemDetail /></LazyLoad> },
       {
         path: "checkout/:id",
-        element: <ProtectedRoute><CheckoutScreen /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><CheckoutScreen /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "payment-status/:ref",
-        element: <ProtectedRoute><PaymentStatus /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><PaymentStatus /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "post",
-        element: <ProtectedRoute><PostListing /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><PostListing /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "my-listings",
-        element: <ProtectedRoute><MyListings /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><MyListings /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "payments",
-        element: <ProtectedRoute><PaymentHistory /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><PaymentHistory /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "notifications",
-        element: <ProtectedRoute><Notifications /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><Notifications /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "messages",
-        element: <ProtectedRoute><MessagesScreen /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><MessagesScreen /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "messages/:conversationId",
-        element: <ProtectedRoute><MessagesScreen /></ProtectedRoute>,
+        element: <ProtectedRoute><LazyLoad><MessagesScreen /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "*",
@@ -65,6 +80,6 @@ export const router = createBrowserRouter([
   },
   {
     path: "/auth",
-    Component: AuthScreen,
+    element: <LazyLoad><AuthScreen /></LazyLoad>,
   },
 ]);

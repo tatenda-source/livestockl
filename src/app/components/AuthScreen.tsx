@@ -6,6 +6,7 @@ import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { useAuthStore } from "../../stores/authStore";
+import { supabase } from "../../lib/supabase";
 import { toast } from "sonner";
 
 export function AuthScreen() {
@@ -14,6 +15,9 @@ export function AuthScreen() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [signupData, setSignupData] = useState({
     firstName: '',
     lastName: '',
@@ -29,6 +33,18 @@ export function AuthScreen() {
       navigate('/');
     } catch (err: any) {
       toast.error(err.message || 'Login failed');
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!resetEmail) { toast.error('Enter your email address'); return; }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail);
+      if (error) throw error;
+      setResetSent(true);
+      toast.success('Password reset email sent');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send reset email');
     }
   };
 
@@ -87,6 +103,34 @@ export function AuthScreen() {
                     minLength={6}
                   />
                 </div>
+                <div className="text-right">
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setShowForgotPassword(!showForgotPassword)}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                {showForgotPassword && (
+                  <div className="space-y-2 p-3 bg-muted rounded-lg">
+                    {resetSent ? (
+                      <p className="text-sm text-green-700">Check your email for the reset link.</p>
+                    ) : (
+                      <>
+                        <Input
+                          type="email"
+                          placeholder="Enter your email"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                        />
+                        <Button type="button" variant="outline" size="sm" className="w-full" onClick={handleForgotPassword}>
+                          Send Reset Link
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? 'Signing in...' : 'Sign In'}
                 </Button>

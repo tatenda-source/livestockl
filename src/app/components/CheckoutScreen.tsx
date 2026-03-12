@@ -127,16 +127,16 @@ export function CheckoutScreen() {
         <div className="space-y-3">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Winning Bid</span>
-            <span className="font-semibold">${currentBid.toLocaleString()}</span>
+            <span className="font-semibold">US${currentBid.toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Platform Fee (5%)</span>
-            <span className="font-semibold">${platformFee.toLocaleString()}</span>
+            <span className="font-semibold">US${platformFee.toLocaleString()}</span>
           </div>
           <Separator />
           <div className="flex justify-between text-lg">
             <span className="font-semibold">Total</span>
-            <span className="font-bold text-primary">${total.toLocaleString()}</span>
+            <span className="font-bold text-primary">US${total.toLocaleString()}</span>
           </div>
         </div>
 
@@ -194,7 +194,7 @@ export function CheckoutScreen() {
           <Button onClick={handlePay} className="w-full h-12 text-lg font-semibold" disabled={initiatePayment.isPending}>
             {initiatePayment.isPending ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
-            ) : `Pay $${total.toLocaleString()}`}
+            ) : `Pay US$${total.toLocaleString()}`}
           </Button>
           <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
             <Lock className="w-3 h-3" /><span>Secured by Paynow</span>
