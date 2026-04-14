@@ -717,3 +717,130 @@ CREATE POLICY "Market intel is public" ON public.market_intel
 
 -- Enable realtime for agent activity log (used by frontend dashboard)
 ALTER PUBLICATION supabase_realtime ADD TABLE public.agent_activity_log;
+
+-- ============================================================
+-- Auction Ownership State Machine (pilot demo, 2026-04-15)
+-- Instruments the five observed states: Registered -> Auctioned
+-- -> Cleared -> Paid -> Transferred. Police clearance is a
+-- first-class gate (physical verification by a policewoman at
+-- the auction floor) and cannot be skipped.
+--
+-- Pattern mirrors settlement_ledger: append-only event log,
+-- service-role-only writes, RLS-scoped reads for the parties
+-- involved (seller, winning bidder).
+-- ============================================================
+
+-- Clearance Events (police clearance state per animal)
+create table if not exists public.clearance_events (
+  id uuid primary key default gen_random_uuid(),
+  livestock_id uuid not null references public.livestock_items(id) on delete cascade,
+  bid_id uuid references public.bids(id),
+  status text not null check (status in ('pending', 'approved', 'blocked')),
+  officer_name text,
+  officer_badge text,
+  district text,
+  notes text,
+  metadata jsonb default '{}',
+  idempotency_key uuid,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists idx_clearance_events_livestock on public.clearance_events(livestock_id);
+create index if not exists idx_clearance_events_status on public.clearance_events(status);
+create index if not exists idx_clearance_events_created on public.clearance_events(created_at desc);
+create unique index if not exists idx_clearance_events_idempotency
+  on public.clearance_events (livestock_id, idempotency_key)
+  where idempotency_key is not null;
+
+drop trigger if exists clearance_events_updated_at on public.clearance_events;
+create trigger clearance_events_updated_at
+  before update on public.clearance_events
+  for each row execute function public.update_updated_at();
+
+-- Ownership Transitions (immutable state-machine audit log)
+create table if not exists public.ownership_transitions (
+  id uuid primary key default gen_random_uuid(),
+  livestock_id uuid not null references public.livestock_items(id) on delete cascade,
+  from_owner_id uuid references public.profiles(id),
+  to_owner_id uuid references public.profiles(id),
+  state text not null check (state in ('registered', 'auctioned', 'cleared', 'paid', 'transferred')),
+  event text not null,
+  bid_id uuid references public.bids(id),
+  payment_id uuid references public.payments(id),
+  clearance_id uuid references public.clearance_events(id),
+  metadata jsonb default '{}',
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_ownership_transitions_livestock on public.ownership_transitions(livestock_id);
+create index if not exists idx_ownership_transitions_state on public.ownership_transitions(state);
+create index if not exists idx_ownership_transitions_created on public.ownership_transitions(created_at desc);
+
+-- Atomic ownership-transition recorder.
+-- Authorization: caller must be one of (from_owner, to_owner, livestock seller)
+-- OR the service_role (edge functions). Matches the settlement_ledger pattern
+-- where user-facing RPCs are gated and background/webhook writers go through
+-- service_role (which bypasses this check entirely since auth.uid() is null
+-- and the seller_id check is the final fall-through... so we explicitly allow
+-- service_role by detecting the null auth.uid() case).
+create or replace function public.record_ownership_transition(
+  p_livestock_id uuid,
+  p_state text,
+  p_event text,
+  p_from_owner uuid default null,
+  p_to_owner uuid default null,
+  p_bid_id uuid default null,
+  p_payment_id uuid default null,
+  p_clearance_id uuid default null,
+  p_metadata jsonb default '{}'
+)
+returns uuid as $$
+declare
+  v_transition_id uuid;
+  v_seller_id uuid;
+  v_caller uuid;
+  v_is_service_role boolean;
+begin
+  v_caller := auth.uid();
+  -- When invoked via service_role key, auth.role() is 'service_role'.
+  v_is_service_role := (auth.role() = 'service_role');
+
+  -- Look up the listing's seller for the authorization check.
+  select seller_id into v_seller_id
+  from public.livestock_items
+  where id = p_livestock_id;
+
+  if not found then
+    raise exception 'Listing not found';
+  end if;
+
+  -- Authorization: service_role bypasses; otherwise caller must be a
+  -- party to this transition (from_owner, to_owner, or the seller).
+  if not v_is_service_role then
+    if v_caller is null then
+      raise exception 'Unauthorized';
+    end if;
+    if v_caller <> coalesce(p_from_owner, '00000000-0000-0000-0000-000000000000'::uuid)
+       and v_caller <> coalesce(p_to_owner, '00000000-0000-0000-0000-000000000000'::uuid)
+       and v_caller <> v_seller_id then
+      raise exception 'Unauthorized: caller must be from_owner, to_owner, or seller';
+    end if;
+  end if;
+
+  insert into public.ownership_transitions (
+    livestock_id, from_owner_id, to_owner_id, state, event,
+    bid_id, payment_id, clearance_id, metadata
+  ) values (
+    p_livestock_id, p_from_owner, p_to_owner, p_state, p_event,
+    p_bid_id, p_payment_id, p_clearance_id, p_metadata
+  )
+  returning id into v_transition_id;
+
+  return v_transition_id;
+end;
+$$ language plpgsql security definer;
+
+-- Enable Realtime so the pilot UI can stream state changes
+alter publication supabase_realtime add table public.clearance_events;
+alter publication supabase_realtime add table public.ownership_transitions;

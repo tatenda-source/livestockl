@@ -183,3 +183,65 @@ create policy "Recipient can mark messages as read"
     content IS NOT DISTINCT FROM (select content from public.messages where id = messages.id)
     and sender_id IS NOT DISTINCT FROM (select sender_id from public.messages where id = messages.id)
   );
+
+-- ============================================================
+-- Auction Ownership State Machine — RLS (pilot demo, 2026-04-15)
+-- Reads scoped to parties involved (seller, winning bidder, or
+-- anyone named in a transition). All writes go through either
+-- the service_role (edge functions) or the
+-- record_ownership_transition() SECURITY DEFINER RPC.
+--
+-- No permissive INSERT/UPDATE policies — this is the SEV-1
+-- lesson from bids: a direct POST /rest/v1/ownership_transitions
+-- would otherwise let any user mint fake transfer events.
+-- ============================================================
+
+-- CLEARANCE EVENTS
+alter table public.clearance_events enable row level security;
+
+-- Seller of the animal can see its clearance events.
+-- Winning bidder (via bid_id) can see them too once linked.
+create policy "Parties can view clearance events"
+  on public.clearance_events for select
+  using (
+    exists (
+      select 1 from public.livestock_items li
+      where li.id = clearance_events.livestock_id
+        and li.seller_id = auth.uid()
+    )
+    or exists (
+      select 1 from public.bids b
+      where b.id = clearance_events.bid_id
+        and b.user_id = auth.uid()
+        and b.is_winner = true
+    )
+  );
+
+-- NO direct INSERT/UPDATE/DELETE policy. Clearance is recorded
+-- by the edge function (service_role) after the physical check.
+
+-- OWNERSHIP TRANSITIONS
+alter table public.ownership_transitions enable row level security;
+
+-- Visible to: anyone named as from_owner or to_owner on the row,
+-- plus the current seller on the livestock listing.
+create policy "Parties can view ownership transitions"
+  on public.ownership_transitions for select
+  using (
+    auth.uid() = from_owner_id
+    or auth.uid() = to_owner_id
+    or exists (
+      select 1 from public.livestock_items li
+      where li.id = ownership_transitions.livestock_id
+        and li.seller_id = auth.uid()
+    )
+  );
+
+-- NO direct INSERT/UPDATE/DELETE policy. All writes flow through
+-- record_ownership_transition() (SECURITY DEFINER, auth-checked)
+-- or service_role (edge functions). This matches the bids pattern.
+
+-- Grant execute on the ownership-transition RPC to authenticated users
+grant execute on function public.record_ownership_transition(
+  uuid, text, text, uuid, uuid, uuid, uuid, uuid, jsonb
+) to authenticated;

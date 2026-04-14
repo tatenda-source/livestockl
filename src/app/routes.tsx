@@ -44,6 +44,7 @@ const AgentDashboard = lazyWithRetry(() => import('./components/AgentDashboard')
 const AgentSetup = lazyWithRetry(() => import('./components/AgentSetup').then(m => ({ default: m.AgentSetup })));
 const BillPayFlow = lazyWithRetry(() => import('./components/BillPayFlow'));
 const TestBillPayPayment = lazyWithRetry(() => import('./components/TestBillPayPayment'));
+const AuctionPilot = lazyWithRetry(() => import('./components/AuctionPilot').then(m => ({ default: m.AuctionPilot })));
 
 function LazyLoad({ children }: { children: React.ReactNode }) {
   // Once a lazy route renders successfully, clear the chunk-reload guard so
@@ -113,6 +114,10 @@ export const router = createBrowserRouter([
       {
         path: "agents",
         element: <ProtectedRoute><LazyLoad><AgentDashboard /></LazyLoad></ProtectedRoute>,
+      },
+      {
+        path: "pilot",
+        element: <ProtectedRoute><LazyLoad><AuctionPilot /></LazyLoad></ProtectedRoute>,
       },
       {
         path: "agents/new",
